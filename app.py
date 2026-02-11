@@ -416,7 +416,7 @@ def main():
             <img src="data:image/png;base64,{}" width="400" alt="Credit CPR Logo">
         </div>
         <h1 class="hero-title">Credit CPR - AI Credit Repair Assistant</h1>
-        <p class="hero-tagline">💚 Bringing Your Credit Back to Life 💚</p>
+        <p class="hero-tagline">Bringing Your Credit Back to Life</p>
         <p class="hero-subtext">Analyze credit reports, identify FCRA violations, and generate professional dispute letters — powered by AI.</p>
     </div>
     """.format(get_logo_base64()), unsafe_allow_html=True)
@@ -445,7 +445,15 @@ def main():
     
     # Sidebar for user information
     with st.sidebar:
-        st.markdown("### 💚 Your Information")
+        st.markdown(
+            """
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <img src="assets/shield.png" width="28">
+                <h2 style="margin: 0;">Your Information</h2>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         st.caption("Used to personalize dispute letters")
         
         user_name = st.text_input("Full Legal Name", value=st.session_state.user_info.get('name', ''))
@@ -466,7 +474,7 @@ def main():
         st.caption("💡 **Tip:** Fill this out before uploading your report")
     
     # Main content area
-    tab1, tab2, tab3 = st.tabs(["💚 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Building Plan"])
+    tab1, tab2, tab3 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Building Plan"])
     
     with tab1:
         st.header("Step 1: Upload Your Credit Report")
@@ -644,14 +652,35 @@ def main():
     
     # Footer
     st.markdown("""
-    <div class="credit-cpr-footer">
-        <h3>💚 Credit CPR - AI Credit Repair Assistant 💚</h3>
-        <p><strong>Bringing Your Credit Back to Life</strong></p>
-        <p>Built to help you exercise your FCRA rights | Not affiliated with any credit bureau</p>
-        <p>⚠️ This tool does not store your credit report or personal information</p>
-        <p style="margin-top: 1rem; color: #2E8B57; font-weight: 600;">© 2026 Credit CPR. All rights reserved.</p>
+    <hr style="margin-top: 40px; margin-bottom: 20px;">
+
+    <div style="text-align: center; padding-bottom: 10px;">
+
+        <img src="assets/shield.png" width="28" style="margin-bottom: 8px;">
+
+        <h3 style="margin-bottom: 5px;">
+            Credit CPR – AI Credit Repair Assistant
+        </h3>
+
+        <p style="font-weight: 600; margin-bottom: 8px;">
+            Bringing Your Credit Back to Life
+        </p>
+
+        <p style="font-size: 13px; opacity: 0.75;">
+            Built to help you exercise your FCRA rights | Not affiliated with any credit bureau
+        </p>
+
+        <p style="font-size: 13px; opacity: 0.75;">
+            ⚠️ This tool does not store your credit report or personal information
+        </p>
+
+        <p style="margin-top: 1rem; font-size: 13px; font-weight: 600;">
+            © 2026 Credit CPR. All rights reserved.
+        </p>
+ 
     </div>
     """, unsafe_allow_html=True)
+   
 
 if __name__ == "__main__":
     main()
