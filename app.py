@@ -49,7 +49,7 @@ if 'credit_data' not in st.session_state:
 if 'user_info' not in st.session_state:
     st.session_state.user_info = {}
 
-# Custom CSS for Credit CPR branding
+    # Custom CSS for Credit CPR branding
 st.markdown("""
 <style>
     /* Credit CPR Color Theme */
@@ -116,7 +116,7 @@ st.markdown("""
         border-left: 4px solid #2E8B57;
     }
     
-    /* Tab styling */
+    /* Tab styling - Fixed with borders */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
@@ -124,11 +124,20 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] {
         background-color: #f0f8f0;
         border-radius: 8px 8px 0 0;
+        border-top: 2px solid #2E8B57;
+        border-left: 2px solid #2E8B57;
+        border-right: 2px solid #2E8B57;
+        border-bottom: none;
+        padding: 12px 20px;
+        white-space: nowrap;
     }
     
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #2E8B57 0%, #7CB342 100%);
         color: white;
+        border-top: 2px solid #1B3A5C;
+        border-left: 2px solid #1B3A5C;
+        border-right: 2px solid #1B3A5C;
     }
     
     /* Footer */
@@ -445,11 +454,11 @@ def main():
     
     # Sidebar for user information
     with st.sidebar:
-        col1, col2 = st.columns([1, 5])
-        
+        col1, col2 = st.columns([1, 4])
+
         with col1:
-            st.image("assets/shield.png", width=28)
-        
+            st.image("assets/shield.png", width=26)
+
         with col2:
             st.markdown("### Your Information")
 
@@ -473,7 +482,7 @@ def main():
         st.caption("💡 **Tip:** Fill this out before uploading your report")
     
     # Main content area
-    tab1, tab2, tab3 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Building Plan"])
+    tab1, tab2, tab3 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan"])
     
     with tab1:
         st.header("Step 1: Upload Your Credit Report")
@@ -655,8 +664,8 @@ def main():
 
     <div style="text-align: center; padding-bottom: 10px;">
 
-        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 5px;">
-            <img src="assets/shield.png" width="32" style="vertical-align: middle;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px;">
+            <img src="assets/shield.png" width="32">
             <h3 style="margin: 0; color: #2E8B57;">
                 Credit CPR – AI Credit Repair Assistant
             </h3>
