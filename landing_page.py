@@ -6,6 +6,7 @@ Educational tool for learning about FCRA rights and credit repair
 import streamlit as st
 import base64
 
+
 def get_image_base64(image_path):
     """Convert image to base64 for embedding"""
     try:
@@ -213,7 +214,7 @@ def landing_page():
         <div class="hero-logo">
             <img src="data:image/png;base64,{shield_base64}" width="80" alt="Shield">
         </div>
-        <h1 class="hero-headline">Revive. Repair. Rebuild.</h1>
+        <h1 class="hero-headline">Revive. Repair. Rebuild!!!</h1>
         <h2 class="hero-subheadline">Your Credit, Your Future</h2>
         <p class="hero-description">
             <strong>Free educational tool</strong> that teaches you how to exercise your FCRA rights and dispute credit report errors yourself. 
@@ -275,99 +276,99 @@ def landing_page():
         """, unsafe_allow_html=True)
     
     # How It Works: Sign It. Stamp It. Mail It.
-    st.markdown("""
+    st.markdown(textwrap.dedent("""
     <div class="process-section">
-        <h2 class="process-title">Learn How to Fix Your Credit in 3 Steps</h2>
-        <h3 class="process-subtitle">Sign It. Stamp It. Mail It.</h3>
+    <h2 class="process-title">Learn How to Fix Your Credit in 3 Steps</h2>
+    <h3 class="process-subtitle">Sign It. Stamp It. Mail It.</h3>
+    
+    <div class="process-steps">
+        <div class="process-step">
+            <div class="step-number">1</div>
+            <div class="step-icon">📤</div>
+            <h3 class="step-title">Upload & Learn</h3>
+            <p class="step-description">
+                Upload your credit report and our AI teaches you what to look for. 
+                Learn about FCRA violations, duplicate accounts, and obsolete information.
+            </p>
+        </div>
         
-        <div class="process-steps">
-            <div class="process-step">
-                <div class="step-number">1</div>
-                <div class="step-icon">📤</div>
-                <h3 class="step-title">Upload & Learn</h3>
-                <p class="step-description">
-                    Upload your credit report and our AI teaches you what to look for. 
-                    Learn about FCRA violations, duplicate accounts, and obsolete information.
-                </p>
-            </div>
-            
-            <div class="process-step">
-                <div class="step-number">2</div>
-                <div class="step-icon">✍️</div>
-                <h3 class="step-title">Generate & Sign</h3>
-                <p class="step-description">
-                    Get professionally written dispute letter templates citing specific FCRA sections. 
-                    Learn exactly what to say and how to say it.
-                </p>
-            </div>
-            
-            <div class="process-step">
-                <div class="step-number">3</div>
-                <div class="step-icon">📮</div>
-                <h3 class="step-title">Mail & Track</h3>
-                <p class="step-description">
-                    Learn the proper way to send disputes via certified mail. 
-                    Understand your rights and the 30-day investigation timeline.
-                </p>
+        <div class="process-step">
+            <div class="step-number">2</div>
+            <div class="step-icon">✍️</div>
+            <h3 class="step-title">Generate & Sign</h3>
+            <p class="step-description">
+                Get professionally written dispute letter templates citing specific FCRA sections. 
+                Learn exactly what to say and how to say it.
+            </p>
+        </div>
+        
+        <div class="process-step">
+            <div class="step-number">3</div>
+            <div class="step-icon">📮</div>
+            <h3 class="step-title">Mail & Track</h3>
+            <p class="step-description">
+                Learn the proper way to send disputes via certified mail. 
+                Understand your rights and the 30-day investigation timeline.
+            </p>
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """), unsafe_allow_html=True)
     
     # Features Grid
     st.markdown("<h2 style='text-align: center; color: #1B3A5C; margin: 3rem 0 2rem;'>What You'll Learn</h2>", unsafe_allow_html=True)
     
-    st.markdown("""
+    st.markdown(textwrap.dedent("""
     <div class="feature-grid">
-        <div class="feature-card">
-            <div class="feature-icon">🤖</div>
-            <div class="feature-title">AI-Powered Education</div>
-            <div class="feature-description">
-                Learn what errors to look for with AI that analyzes your report for common FCRA violations
-            </div>
+         <div class="feature-card">
+         <div class="feature-icon">🤖</div>
+         <div class="feature-title">AI-Powered Education</div>
+         <div class="feature-description">
+            Learn what errors to look for with AI that analyzes your report for common FCRA violations
+         </div>
+     </div>
+    
+     <div class="feature-card">
+         <div class="feature-icon">📜</div>
+         <div class="feature-title">FCRA Rights Training</div>
+         <div class="feature-description">
+            Understand your legal rights under the Fair Credit Reporting Act and how to exercise them
+         </div>
+     </div>
+    
+     <div class="feature-card">
+        <div class="feature-icon">✉️</div>
+        <div class="feature-title">Letter Templates</div>
+        <div class="feature-description">
+            Get professionally written templates you can customize and send yourself
         </div>
-        
-        <div class="feature-card">
-            <div class="feature-icon">📜</div>
-            <div class="feature-title">FCRA Rights Training</div>
-            <div class="feature-description">
-                Understand your legal rights under the Fair Credit Reporting Act and how to exercise them
-            </div>
+     </div>
+    
+     <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">Credit Building Plan</div>
+        <div class="feature-description">
+            Learn proven strategies to build positive credit history and improve your score
         </div>
-        
-        <div class="feature-card">
-            <div class="feature-icon">✉️</div>
-            <div class="feature-title">Letter Templates</div>
-            <div class="feature-description">
-                Get professionally written templates you can customize and send yourself
-            </div>
+     </div>
+    
+     <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">100% Private</div>
+        <div class="feature-description">
+            We don't store your credit report or personal data. Learn in complete privacy.
         </div>
-        
-        <div class="feature-card">
-            <div class="feature-icon">📊</div>
-            <div class="feature-title">Credit Building Plan</div>
-            <div class="feature-description">
-                Learn proven strategies to build positive credit history and improve your score
-            </div>
+     </div>
+    
+     <div class="feature-card">
+        <div class="feature-icon">💯</div>
+        <div class="feature-title">Completely Free</div>
+        <div class="feature-description">
+            You have the right to dispute errors yourself for free. We just teach you how.
         </div>
-        
-        <div class="feature-card">
-            <div class="feature-icon">🔒</div>
-            <div class="feature-title">100% Private</div>
-            <div class="feature-description">
-                We don't store your credit report or personal data. Learn in complete privacy.
-            </div>
-        </div>
-        
-        <div class="feature-card">
-            <div class="feature-icon">💯</div>
-            <div class="feature-title">Completely Free</div>
-            <div class="feature-description">
-                You have the right to dispute errors yourself for free. We just teach you how.
-            </div>
-        </div>
+     </div>
     </div>
-    """, unsafe_allow_html=True)
+    """), unsafe_allow_html=True)
     
     # FAQ Section
     st.markdown("<h2 style='text-align: center; color: #1B3A5C; margin: 3rem 0 2rem;'>Frequently Asked Questions</h2>", unsafe_allow_html=True)
