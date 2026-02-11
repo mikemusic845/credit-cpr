@@ -11,6 +11,11 @@ from docx import Document
 from docx.shared import Pt, Inches
 from datetime import datetime
 import PyPDF2
+import base64
+
+def get_shield_base64():
+    with open("assets/shield.png", "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
 # Page config
 st.set_page_config(
@@ -418,6 +423,16 @@ Format it clearly with headers and bullet points."""
 
 # Main App UI
 def main():
+    # Initialize landing page state
+    if 'show_landing' not in st.session_state:
+        st.session_state.show_landing = True
+    
+    # Show landing page first
+    if st.session_state.show_landing:
+        from landing_page import landing_page
+        landing_page()
+        return  # Don't show the app yet
+    
     # Credit CPR Branded Header
     st.markdown("""
     <div class="main-header">
@@ -689,10 +704,9 @@ def main():
         </p>
 
         </div>
-        """.format(get_logo_base64()),
+        """.format(get_shield_base64()),
         unsafe_allow_html=True
     )
-   
 
 if __name__ == "__main__":
     main()
