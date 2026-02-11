@@ -1,0 +1,14 @@
+# Secrets - NEVER commit!
+.streamlit/secrets.toml
+.streamlit/
+# Python
+__pycache__/
+*.pyc
+venv/
+streamlit-env/
+
+# OS files
+.DS_Store
+
+# PDFs and test files
+*.pdf
