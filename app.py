@@ -416,7 +416,7 @@ def main():
             <img src="data:image/png;base64,{}" width="400" alt="Credit CPR Logo">
         </div>
         <h1 class="hero-title">Credit CPR - AI Credit Repair Assistant</h1>
-        <p class="hero-tagline">Bringing Your Credit Back to Life</p>
+        <p class="hero-tagline">Bringing Your Credit Back to Life🩺</p>
         <p class="hero-subtext">Analyze credit reports, identify FCRA violations, and generate professional dispute letters — powered by AI.</p>
     </div>
     """.format(get_logo_base64()), unsafe_allow_html=True)
