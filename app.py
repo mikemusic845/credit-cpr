@@ -12,6 +12,8 @@ from docx.shared import Pt, Inches
 from datetime import datetime
 import PyPDF2
 import base64
+import auth  # Authentication system
+import auth
 
 def get_shield_base64():
     with open("assets/shield.png", "rb") as f:
@@ -173,7 +175,7 @@ def get_anthropic_client():
     
     # Check if we got a valid key
     if not api_key or api_key == "":
-        st.error("⚠️ **API Key Not Found!**")
+        st.error("**API Key Not Found!**")
         st.info("""
         Please set up your Anthropic API key using ONE of these methods:
         
@@ -197,7 +199,7 @@ def get_anthropic_client():
     
     # Validate key format
     if not api_key.startswith("sk-ant-"):
-        st.error(f"⚠️ Invalid API key format. Key should start with 'sk-ant-' but yours starts with '{api_key[:7]}'")
+        st.error(f"Invalid API key format. Key should start with 'sk-ant-' but yours starts with '{api_key[:7]}'")
         st.stop()
     
     # Try to import and initialize Anthropic
@@ -206,11 +208,11 @@ def get_anthropic_client():
         client = Anthropic(api_key=api_key)
         return client
     except ImportError:
-        st.error("⚠️ Anthropic library not installed properly!")
+        st.error("Anthropic library not installed properly!")
         st.info("Run this command: `pip install anthropic`")
         st.stop()
     except Exception as e:
-        st.error(f"⚠️ Error initializing Anthropic client: {str(e)}")
+        st.error(f"Error initializing Anthropic client: {str(e)}")
         st.info("Try reinstalling: `pip install --upgrade anthropic`")
         st.stop()
 
@@ -423,15 +425,27 @@ Format it clearly with headers and bullet points."""
 
 # Main App UI
 def main():
-    # Initialize landing page state
+    # Initialize session states
     if 'show_landing' not in st.session_state:
         st.session_state.show_landing = True
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    if 'user' not in st.session_state:
+        st.session_state.user = None
     
-    # Show landing page first
-    if st.session_state.show_landing:
+    # Show landing page first (if not authenticated)
+    if st.session_state.show_landing and not st.session_state.authenticated:
         from landing_page import landing_page
         landing_page()
-        return  # Don't show the app yet
+        return
+    
+    # Show login if not authenticated
+    if not st.session_state.authenticated:
+        auth.show_login_page()
+        return
+    
+    # Show user dashboard in sidebar
+    auth.show_user_dashboard()
     
     # Credit CPR Branded Header
     st.markdown("""
@@ -440,13 +454,13 @@ def main():
             <img src="data:image/png;base64,{}" width="400" alt="Credit CPR Logo">
         </div>
         <h1 class="hero-title">Credit CPR - AI Credit Repair Assistant</h1>
-        <p class="hero-tagline">Bringing Your Credit Back to Life🩺</p>
-        <p class="hero-subtext">Analyze credit reports, identify FCRA violations, and generate professional dispute letters — powered by AI.</p>
+        <p class="hero-tagline">Bringing Your Credit Back to Life</p>
+        <p class="hero-subtext">Analyze credit reports, identify FCRA violations, and generate professional dispute letters - powered by AI.</p>
     </div>
     """.format(get_logo_base64()), unsafe_allow_html=True)
     
     # Critical disclaimer
-    with st.expander("⚠️ IMPORTANT LEGAL NOTICE - READ BEFORE USING", expanded=True):
+    with st.expander("IMPORTANT LEGAL NOTICE - READ BEFORE USING", expanded=True):
         st.warning("""
         **THIS TOOL PROVIDES EDUCATIONAL INFORMATION ONLY**
         
@@ -491,7 +505,7 @@ def main():
                 'ssn_last4': user_ssn,
                 'dob': user_dob
             }
-            st.success("✅ Information saved!")
+            st.success("[OK] Information saved!")
         
         st.divider()
         st.caption("💡 **Tip:** Fill this out before uploading your report")
@@ -510,12 +524,23 @@ def main():
                 raw_text = extract_text_from_pdf(uploaded_file)
             
             if raw_text:
-                st.success("✅ PDF loaded successfully!")
+                st.success("[OK] PDF loaded successfully!")
                 
                 with st.expander("📄 View extracted text (first 1000 characters)"):
                     st.text(raw_text[:1000] + "...")
                 
                 if st.button("🔍 Analyze Credit Report with AI", type="primary", use_container_width=True):
+                    # CHECK USAGE LIMITS
+                    user_id = st.session_state.user['id']
+                    can_analyze, message = auth.can_analyze_report(user_id)
+                    
+                    if not can_analyze:
+                        st.error(message)
+                        st.info("💡 **Want unlimited analyses?** Upgrade to Credit CPR Basic ($19/mo) or Pro ($29/mo)!")
+                        st.stop()
+                    
+                    st.info(message)  # Show remaining analyses
+                    
                     client = get_anthropic_client()
                     
                     # Parse the report
@@ -534,6 +559,9 @@ def main():
                         errors = analyze_for_errors(credit_data, client)
                         st.session_state.errors_found = errors
                         st.session_state.analysis_complete = True
+                    
+                    # RECORD THE ANALYSIS
+                    auth.record_analysis(user_id, uploaded_file.name, len(errors))
                     
                     if errors:
                         st.balloons()
@@ -606,7 +634,7 @@ def main():
             # Generate letter button
             if st.button("✍️ Generate Dispute Letter", type="primary", use_container_width=True):
                 if not st.session_state.user_info.get('name'):
-                    st.warning("⚠️ Please fill in your information in the sidebar first")
+                    st.warning("Please fill in your information in the sidebar first")
                 else:
                     client = get_anthropic_client()
                     
@@ -618,7 +646,7 @@ def main():
                             client
                         )
                     
-                    st.success("✅ Letter generated!")
+                    st.success("[OK] Letter generated!")
                     
                     # Display letter
                     st.text_area("Your Dispute Letter", letter_text, height=400)
@@ -660,7 +688,7 @@ def main():
                         client
                     )
                 
-                st.success("✅ Your plan is ready!")
+                st.success("[OK] Your plan is ready!")
                 st.markdown(plan)
                 
                 # Download plan
@@ -683,7 +711,7 @@ def main():
         <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px;">
             <img src="data:image/png;base64,{}" width="32">
             <h3 style="margin: 0;">
-                Credit CPR – AI Credit Repair Assistant
+                Credit CPR - AI Credit Repair Assistant
             </h3>
         </div>
 
@@ -696,7 +724,7 @@ def main():
         </p>
 
         <p style="font-size: 13px; opacity: 0.75;">
-            ⚠️ This tool does not store your credit report or personal information
+            This tool does not store your credit report or personal information
         </p>
 
         <p style="margin-top: 1rem; font-size: 13px; font-weight: 600;">
