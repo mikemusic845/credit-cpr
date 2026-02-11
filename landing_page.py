@@ -46,19 +46,37 @@ def landing_page():
     # Educational Disclaimer
     st.warning("📚 **Educational Assistant - Not a Credit Repair Service**\n\nCredit CPR is an **AI-powered educational assistant** that teaches you how to identify errors on your credit report and exercise your rights under the Fair Credit Reporting Act (FCRA). You dispute errors yourself - we equip you with the knowledge and tools.")
     
-    # Social Proof
-    st.markdown("### Join Thousands Learning to Fix Their Credit")
+    # Social Proof with 5-Star Reviews
+    st.markdown("### What Our Users Say")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.info("💬 *\"Learned how to find 3 errors I never knew existed!\"*\n\n**- Sarah M.**")
+        st.markdown("""
+        <div style='background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+            <div style='color: #FFD700; font-size: 1.2rem; margin-bottom: 0.5rem;'>⭐⭐⭐⭐⭐</div>
+            <p style='font-style: italic; color: #333; margin-bottom: 1rem;'>"Learned how to find 3 errors I never knew existed!"</p>
+            <p style='font-weight: bold; color: #2E8B57; margin: 0;'>- Sarah M.</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
-        st.info("💬 *\"The AI found duplicate accounts the bureaus missed\"*\n\n**- Michael T.**")
+        st.markdown("""
+        <div style='background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+            <div style='color: #FFD700; font-size: 1.2rem; margin-bottom: 0.5rem;'>⭐⭐⭐⭐⭐</div>
+            <p style='font-style: italic; color: #333; margin-bottom: 1rem;'>"The AI found duplicate accounts the bureaus missed"</p>
+            <p style='font-weight: bold; color: #2E8B57; margin: 0;'>- Michael T.</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
-        st.info("💬 *\"Finally understand my FCRA rights!\"*\n\n**- Jennifer L.**")
+        st.markdown("""
+        <div style='background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+            <div style='color: #FFD700; font-size: 1.2rem; margin-bottom: 0.5rem;'>⭐⭐⭐⭐⭐</div>
+            <p style='font-style: italic; color: #333; margin-bottom: 1rem;'>"Finally understand my FCRA rights!"</p>
+            <p style='font-weight: bold; color: #2E8B57; margin: 0;'>- Jennifer L.</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -133,24 +151,86 @@ def landing_page():
     
     st.markdown("---")
     
+    # Pricing Section
+    st.markdown("## Choose Your Plan")
+    st.markdown("### Simple, transparent pricing to take control of your credit")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        st.write("")  # Spacer
+    
+    with col2:
+        # Basic Plan
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #f0f8f0 0%, #e8f5e9 100%); 
+        padding: 2rem; border-radius: 15px; border: 2px solid #2E8B57; margin-bottom: 2rem;'>
+            <div style='text-align: center;'>
+                <h3 style='color: #1B3A5C; margin-bottom: 0.5rem;'>🟦 Credit CPR Basic</h3>
+                <div style='font-size: 2.5rem; font-weight: bold; color: #2E8B57; margin: 1rem 0;'>
+                    $19<span style='font-size: 1rem; font-weight: normal;'>/month</span>
+                </div>
+            </div>
+            <hr style='border: 1px solid #2E8B57; margin: 1.5rem 0;'>
+            <ul style='list-style: none; padding: 0; text-align: left;'>
+                <li style='padding: 0.5rem 0;'>✅ AI credit report analysis</li>
+                <li style='padding: 0.5rem 0;'>✅ Identification of potential inaccuracies</li>
+                <li style='padding: 0.5rem 0;'>✅ Educational explanations</li>
+                <li style='padding: 0.5rem 0;'>✅ Limited dispute template generation</li>
+                <li style='padding: 0.5rem 0;'>✅ Email support</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Pro Plan
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); 
+        padding: 2rem; border-radius: 15px; border: 3px solid #2E8B57; margin-bottom: 2rem; 
+        box-shadow: 0 4px 15px rgba(46, 139, 87, 0.3);'>
+            <div style='background: #2E8B57; color: white; text-align: center; 
+            padding: 0.5rem; border-radius: 5px; margin-bottom: 1rem; font-weight: bold;'>
+                MOST POPULAR
+            </div>
+            <div style='text-align: center;'>
+                <h3 style='color: #1B3A5C; margin-bottom: 0.5rem;'>🟩 Credit CPR Pro</h3>
+                <div style='font-size: 2.5rem; font-weight: bold; color: #2E8B57; margin: 1rem 0;'>
+                    $29<span style='font-size: 1rem; font-weight: normal;'>/month</span>
+                </div>
+            </div>
+            <hr style='border: 1px solid #2E8B57; margin: 1.5rem 0;'>
+            <ul style='list-style: none; padding: 0; text-align: left;'>
+                <li style='padding: 0.5rem 0;'>✅ <strong>Everything in Basic</strong></li>
+                <li style='padding: 0.5rem 0;'>✅ Unlimited dispute templates</li>
+                <li style='padding: 0.5rem 0;'>✅ Advanced AI insights</li>
+                <li style='padding: 0.5rem 0;'>✅ Personalized education roadmap</li>
+                <li style='padding: 0.5rem 0;'>✅ Priority support</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.write("")  # Spacer
+    
+    st.markdown("---")
+    
     # FAQ Section
     st.markdown("## Frequently Asked Questions")
     
-    with st.expander("> How does Credit CPR work?"):
+    with st.expander("❓ How does Credit CPR work?"):
         st.write("""
         Credit CPR is an AI-powered educational assistant that teaches you how to exercise your FCRA rights. 
         Under federal law, you have the right to dispute credit report errors yourself. Credit CPR equips you with 
         the knowledge, tools, and templates to do it effectively - putting you in control of your credit repair journey.
         """)
     
-    with st.expander("> Is this a credit repair company?"):
+    with st.expander("❓ Is this a credit repair company?"):
         st.write("""
         **No.** Credit CPR is an educational platform that teaches you how to repair your own credit. We don't repair 
         your credit for you - we teach you how to do it yourself, which is your legal right under the FCRA. This means 
         you're not subject to Credit Repair Organizations Act (CRORA) restrictions, and you can start immediately.
         """)
     
-    with st.expander("> How does it work?"):
+    with st.expander("❓ How does it work?"):
         st.write("""
         1. **Upload your credit report** (PDF from any bureau)
         2. **AI analyzes it** and teaches you what errors to look for
@@ -159,26 +239,26 @@ def landing_page():
         5. **Track your disputes** and understand the 30-day timeline
         """)
     
-    with st.expander("> Do you store my credit report?"):
+    with st.expander("❓ Do you store my credit report?"):
         st.write("""
         **No.** Your credit report is processed in your browser only and is never saved to our servers. We take your 
         privacy seriously. Once you close your browser, your data is gone.
         """)
     
-    with st.expander("> Will this actually improve my credit score?"):
+    with st.expander("❓ Will this actually improve my credit score?"):
         st.write("""
         **It can!** If your credit report contains errors (which studies show up to 79% do), successfully disputing 
         them can improve your score. However, we're an educational tool - we teach you the process, but results depend 
         on whether errors exist on your report and how bureaus respond to your disputes.
         """)
     
-    with st.expander("> How long does the dispute process take?"):
+    with st.expander("❓ How long does the dispute process take?"):
         st.write("""
         Credit bureaus have **30 days** to investigate disputes under the FCRA. You'll learn the entire timeline and 
         what to expect at each stage. Many people see results within 30-45 days of mailing their first dispute letter.
         """)
     
-    with st.expander("> What if the bureaus don't respond?"):
+    with st.expander("❓ What if the bureaus don't respond?"):
         st.write("""
         We teach you your rights! If bureaus don't respond within 30 days or fail to properly investigate, you'll learn 
         about follow-up strategies, including filing complaints with the CFPB (Consumer Financial Protection Bureau) and 
