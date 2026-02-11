@@ -659,19 +659,20 @@ def main():
                 )
     
     # Footer
-    st.markdown("""
-    <hr style="margin-top: 40px; margin-bottom: 20px;">
+    st.markdown(
+        """
+        <hr style="margin-top: 40px; margin-bottom: 20px;">
 
-    <div style="text-align: center; padding-bottom: 10px;">
+        <div style="text-align: center;">
 
         <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px;">
-            <img src="assets/shield.png" width="32">
-            <h3 style="margin: 0; color: #2E8B57;">
+            <img src="data:image/png;base64,{}" width="32">
+            <h3 style="margin: 0;">
                 Credit CPR – AI Credit Repair Assistant
             </h3>
         </div>
 
-        <p style="font-weight: 600; margin-bottom: 8px; color: #1B3A5C;">
+        <p style="font-weight: 600; margin-bottom: 8px;">
             Bringing Your Credit Back to Life
         </p>
 
@@ -683,13 +684,14 @@ def main():
             ⚠️ This tool does not store your credit report or personal information
         </p>
 
-        <p style="margin-top: 1rem; font-size: 13px; font-weight: 600; color: #2E8B57;">
+        <p style="margin-top: 1rem; font-size: 13px; font-weight: 600;">
             © 2026 Credit CPR. All rights reserved.
         </p>
 
-    </div>
-    """, unsafe_allow_html=True)
-
+        </div>
+        """.format(get_logo_base64()),
+        unsafe_allow_html=True
+    )
    
 
 if __name__ == "__main__":
