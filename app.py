@@ -15,7 +15,7 @@ import PyPDF2
 # Page config
 st.set_page_config(
     page_title="Credit CPR - AI Credit Repair Assistant",
-    page_icon="💚",
+    page_icon="assets/shield.png",
     layout="wide",
     initial_sidebar_state="expanded"
     )
