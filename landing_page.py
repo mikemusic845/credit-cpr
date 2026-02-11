@@ -5,7 +5,7 @@ Educational tool for learning about FCRA rights and credit repair
 
 import streamlit as st
 import base64
-
+import textwrap
 
 def get_image_base64(image_path):
     """Convert image to base64 for embedding"""
