@@ -136,21 +136,21 @@ def landing_page():
     # FAQ Section
     st.markdown("## Frequently Asked Questions")
     
-    with st.expander("❓ How does Credit CPR work?"):
+    with st.expander("> How does Credit CPR work?"):
         st.write("""
         Credit CPR is an AI-powered educational assistant that teaches you how to exercise your FCRA rights. 
         Under federal law, you have the right to dispute credit report errors yourself. Credit CPR equips you with 
         the knowledge, tools, and templates to do it effectively - putting you in control of your credit repair journey.
         """)
     
-    with st.expander("❓ Is this a credit repair company?"):
+    with st.expander("> Is this a credit repair company?"):
         st.write("""
         **No.** Credit CPR is an educational platform that teaches you how to repair your own credit. We don't repair 
         your credit for you - we teach you how to do it yourself, which is your legal right under the FCRA. This means 
         you're not subject to Credit Repair Organizations Act (CRORA) restrictions, and you can start immediately.
         """)
     
-    with st.expander("❓ How does it work?"):
+    with st.expander("> How does it work?"):
         st.write("""
         1. **Upload your credit report** (PDF from any bureau)
         2. **AI analyzes it** and teaches you what errors to look for
@@ -159,26 +159,26 @@ def landing_page():
         5. **Track your disputes** and understand the 30-day timeline
         """)
     
-    with st.expander("❓ Do you store my credit report?"):
+    with st.expander("> Do you store my credit report?"):
         st.write("""
         **No.** Your credit report is processed in your browser only and is never saved to our servers. We take your 
         privacy seriously. Once you close your browser, your data is gone.
         """)
     
-    with st.expander("❓ Will this actually improve my credit score?"):
+    with st.expander("> Will this actually improve my credit score?"):
         st.write("""
         **It can!** If your credit report contains errors (which studies show up to 79% do), successfully disputing 
         them can improve your score. However, we're an educational tool - we teach you the process, but results depend 
         on whether errors exist on your report and how bureaus respond to your disputes.
         """)
     
-    with st.expander("❓ How long does the dispute process take?"):
+    with st.expander("> How long does the dispute process take?"):
         st.write("""
         Credit bureaus have **30 days** to investigate disputes under the FCRA. You'll learn the entire timeline and 
         what to expect at each stage. Many people see results within 30-45 days of mailing their first dispute letter.
         """)
     
-    with st.expander("❓ What if the bureaus don't respond?"):
+    with st.expander("> What if the bureaus don't respond?"):
         st.write("""
         We teach you your rights! If bureaus don't respond within 30 days or fail to properly investigate, you'll learn 
         about follow-up strategies, including filing complaints with the CFPB (Consumer Financial Protection Bureau) and 
