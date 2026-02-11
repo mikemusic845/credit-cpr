@@ -18,7 +18,26 @@ st.set_page_config(
     page_icon="💚",
     layout="wide",
     initial_sidebar_state="expanded"
-)
+    )
+
+st.markdown("""
+<style>
+
+/* Fix tab background conflicts without overriding theme */
+button[data-baseweb="tab"] {
+    background-color: transparent !important;
+}
+
+button[data-baseweb="tab"] p {
+    color: inherit !important;
+}
+
+button[data-baseweb="tab"][aria-selected="true"] p {
+    font-weight: 600;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'analysis_complete' not in st.session_state:
