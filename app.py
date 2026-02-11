@@ -655,9 +655,12 @@ def main():
 
     <div style="text-align: center; padding-bottom: 10px;">
 
-        <h3 style="margin-bottom: 5px; color: #2E8B57;">
-            💚 Credit CPR – AI Credit Repair Assistant
-        </h3>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 5px;">
+            <img src="assets/shield.png" width="32" style="vertical-align: middle;">
+            <h3 style="margin: 0; color: #2E8B57;">
+                Credit CPR – AI Credit Repair Assistant
+            </h3>
+        </div>
 
         <p style="font-weight: 600; margin-bottom: 8px; color: #1B3A5C;">
             Bringing Your Credit Back to Life
