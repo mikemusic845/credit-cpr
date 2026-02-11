@@ -4,11 +4,23 @@ Educational tool for learning about FCRA rights and credit repair
 """
 
 import streamlit as st
+import base64
+
+def get_image_base64(image_path):
+    """Convert image to base64 for embedding"""
+    try:
+        with open(image_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except:
+        return ""
 
 def landing_page():
     """Display the landing page for Credit CPR"""
     
-    # Hero Section
+    # Get shield logo as base64
+    shield_base64 = get_image_base64("assets/shield.png")
+    
+    # Hero Section with CSS
     st.markdown("""
     <style>
         /* Landing Page Specific Styles */
@@ -179,9 +191,6 @@ def landing_page():
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             margin: 1rem;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
         }
         
         .testimonial-text {
@@ -199,10 +208,10 @@ def landing_page():
     """, unsafe_allow_html=True)
     
     # Hero Section
-    st.markdown("""
+    hero_html = f"""
     <div class="hero-section">
         <div class="hero-logo">
-            <img src="assets/shield.png" width="80">
+            <img src="data:image/png;base64,{shield_base64}" width="80" alt="Shield">
         </div>
         <h1 class="hero-headline">Revive. Repair. Rebuild.</h1>
         <h2 class="hero-subheadline">Your Credit, Your Future</h2>
@@ -211,7 +220,8 @@ def landing_page():
             Learn what the credit bureaus don't want you to know.
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(hero_html, unsafe_allow_html=True)
     
     # CTA Buttons
     col1, col2, col3 = st.columns([1, 2, 1])
