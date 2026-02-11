@@ -445,23 +445,22 @@ def main():
     
     # Sidebar for user information
     with st.sidebar:
-        st.markdown(
-            """
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <img src="assets/shield.png" width="28">
-                <h2 style="margin: 0;">Your Information</h2>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        st.caption("Used to personalize dispute letters")
+        col1, col2 = st.columns([1, 5])
         
+        with col1:
+            st.image("assets/shield.png", width=28)
+        
+        with col2:
+            st.markdown("### Your Information")
+
+        st.caption("Used to personalize dispute letters")
+
         user_name = st.text_input("Full Legal Name", value=st.session_state.user_info.get('name', ''))
         user_address = st.text_area("Current Address", value=st.session_state.user_info.get('address', ''))
         user_ssn = st.text_input("Last 4 of SSN (Optional)", max_chars=4, value=st.session_state.user_info.get('ssn_last4', ''))
         user_dob = st.text_input("Date of Birth (MM/DD/YYYY)", value=st.session_state.user_info.get('dob', ''))
         
-        if st.button("💾 Save Info"):
+        if st.button("Save Information", use_container_width=True):
             st.session_state.user_info = {
                 'name': user_name,
                 'address': user_address,
@@ -656,13 +655,11 @@ def main():
 
     <div style="text-align: center; padding-bottom: 10px;">
 
-        <img src="assets/shield.png" width="28" style="margin-bottom: 8px;">
-
-        <h3 style="margin-bottom: 5px;">
-            Credit CPR – AI Credit Repair Assistant
+        <h3 style="margin-bottom: 5px; color: #2E8B57;">
+            💚 Credit CPR – AI Credit Repair Assistant
         </h3>
 
-        <p style="font-weight: 600; margin-bottom: 8px;">
+        <p style="font-weight: 600; margin-bottom: 8px; color: #1B3A5C;">
             Bringing Your Credit Back to Life
         </p>
 
@@ -674,12 +671,13 @@ def main():
             ⚠️ This tool does not store your credit report or personal information
         </p>
 
-        <p style="margin-top: 1rem; font-size: 13px; font-weight: 600;">
+        <p style="margin-top: 1rem; font-size: 13px; font-weight: 600; color: #2E8B57;">
             © 2026 Credit CPR. All rights reserved.
         </p>
- 
+
     </div>
     """, unsafe_allow_html=True)
+
    
 
 if __name__ == "__main__":
