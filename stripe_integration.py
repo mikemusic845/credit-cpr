@@ -33,8 +33,8 @@ def create_checkout_session(price_id, user_email, success_url, cancel_url):
                 'quantity': 1,
             }],
             mode='subscription',
-            success_url=success_url + '?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url=cancel_url,
+            success_url = "https://credit-cpr.onrender.com/?checkout=success"  
+            cancel_url = "https://credit-cpr.onrender.com/?checkout=cancel"
             metadata={
                 'user_email': user_email
             }
@@ -48,7 +48,8 @@ def create_customer_portal_session(customer_id, return_url):
     try:
         portal_session = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=return_url,
+            rsuccess_url = "https://credit-cpr.onrender.com/?checkout=success"  
+            cancel_url = "https://credit-cpr.onrender.com/?checkout=cancel"
         )
         return portal_session.url, None
     except Exception as e:
