@@ -22,7 +22,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 # Your app URLs (change for production)
-REDIRECT_URI = "http://localhost:8501"  # Change to your domain
+REDIRECT_URI = "https://credit-cpr.onrender.com"
 # For production: REDIRECT_URI = "https://credit-cpr.onrender.com"
 
 def get_google_auth_url():
