@@ -447,7 +447,12 @@ def main():
     
     # Show user dashboard in sidebar
     auth.show_user_dashboard()
-    
+
+    # Admin panel for admins
+    import admin_system
+    if admin_system.is_admin(st.session_state.user['email']):
+        admin_system.show_admin_panel()
+   
     # Handle upgrade modal
     import stripe_integration
     

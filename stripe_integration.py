@@ -33,8 +33,8 @@ def create_checkout_session(price_id, user_email, success_url, cancel_url):
                 'quantity': 1,
             }],
             mode='subscription',
-            success_url = "https://credit-cpr.onrender.com/?checkout=success"  
-            cancel_url = "https://credit-cpr.onrender.com/?checkout=cancel"
+            success_url=success_url + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=cancel_url,
             metadata={
                 'user_email': user_email
             }
@@ -48,8 +48,7 @@ def create_customer_portal_session(customer_id, return_url):
     try:
         portal_session = stripe.billing_portal.Session.create(
             customer=customer_id,
-            rsuccess_url = "https://credit-cpr.onrender.com/?checkout=success"  
-            cancel_url = "https://credit-cpr.onrender.com/?checkout=cancel"
+            return_url=return_url,
         )
         return portal_session.url, None
     except Exception as e:
@@ -141,8 +140,8 @@ def start_checkout(price_id, plan_name):
     user_email = st.session_state.user['email']
     
     # Create success and cancel URLs
-    success_url = "http://localhost:8501/?checkout=success"  # Change to your domain in production
-    cancel_url = "http://localhost:8501/?checkout=cancel"
+    success_url = "https://credit-cpr.onrender.com/?checkout=success"
+    cancel_url = "https://credit-cpr.onrender.com/?checkout=cancel"
     
     checkout_url, error = create_checkout_session(price_id, user_email, success_url, cancel_url)
     
@@ -170,7 +169,7 @@ def show_manage_subscription():
             st.write(f"Renews: {subscription.current_period_end}")
             
             if st.button("🔧 Manage Subscription (Cancel, Update Card, etc.)", use_container_width=True):
-                return_url = "http://localhost:8501"  # Change to your domain in production
+                return_url = "https://credit-cpr.onrender.com"
                 portal_url, error = create_customer_portal_session(customer.id, return_url)
                 
                 if portal_url:
