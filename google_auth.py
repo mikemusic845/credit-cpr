@@ -22,7 +22,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 # Your app URLs (change for production)
-REDIRECT_URI = "https://credit-cpr.onrender.com"
+REDIRECT_URI = "http://localhost:8501"  # Change to your domain
 # For production: REDIRECT_URI = "https://credit-cpr.onrender.com"
 
 def get_google_auth_url():
@@ -59,10 +59,20 @@ def get_user_info(access_token):
 def handle_google_callback():
     """Handle OAuth callback from Google"""
     # Check if we have a code in the URL
-    params = st.query_params
+    try:
+        params = st.query_params
+    except AttributeError:
+        # Fallback for older Streamlit versions
+        params = st.experimental_get_query_params()
     
-    if 'code' in params:
-        code = params['code']
+    # Handle both dict and direct access
+    code = None
+    if isinstance(params, dict):
+        code = params.get('code', [None])[0] if 'code' in params else None
+    else:
+        code = params.get('code', None)
+    
+    if code:
         
         try:
             # Exchange code for token
@@ -124,7 +134,10 @@ def handle_google_callback():
                     conn.close()
                     
                     # Clear the code from URL
-                    st.query_params.clear()
+                    try:
+                        st.query_params.clear()
+                    except:
+                        st.experimental_set_query_params()
                     st.rerun()
                 else:
                     st.error("Could not get email from Google")
@@ -135,7 +148,10 @@ def handle_google_callback():
             st.error(f"Error during Google sign-in: {str(e)}")
         
         # Clear the code parameter
-        st.query_params.clear()
+        try:
+            st.query_params.clear()
+        except:
+            st.experimental_set_query_params()
 
 def show_google_login_button():
     """Show Google Sign-In button"""
