@@ -430,6 +430,7 @@ def main():
         st.session_state.show_landing = True
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
+        
     if 'user' not in st.session_state:
         st.session_state.user = None
     
@@ -447,6 +448,33 @@ def main():
     # Show user dashboard in sidebar
     auth.show_user_dashboard()
     
+    # Handle upgrade modal
+    import stripe_integration
+    
+    # Check for checkout success/cancel
+    stripe_integration.handle_checkout_success()
+    
+    # Show upgrade modal if requested
+    if st.session_state.get('show_upgrade', False):
+        st.markdown("## 🚀 Choose Your Plan")
+        stripe_integration.show_upgrade_options()
+        
+        if st.button("← Back to Dashboard"):
+            st.session_state.show_upgrade = False
+            st.rerun()
+        
+        st.stop()  # Don't show main app
+    
+    # Show subscription management if requested
+    if st.session_state.get('show_manage', False):
+        st.markdown("## 🔧 Manage Your Subscription")
+        stripe_integration.show_manage_subscription()
+        
+        if st.button("← Back to Dashboard"):
+            st.session_state.show_manage = False
+            st.rerun()
+        
+        st.stop()  # Don't show main app
     # Credit CPR Branded Header
     st.markdown("""
     <div class="main-header">
@@ -536,7 +564,12 @@ def main():
                     
                     if not can_analyze:
                         st.error(message)
-                        st.info("💡 **Want unlimited analyses?** Upgrade to Credit CPR Basic ($19/mo) or Pro ($29/mo)!")
+                        
+                        import stripe_integration
+                        if st.button("🚀 Upgrade to Basic ($19/mo) or Pro ($29/mo)", type="primary", use_container_width=True):
+                           st.session_state.show_upgrade = True
+                           st.rerun()
+        
                         st.stop()
                     
                     st.info(message)  # Show remaining analyses

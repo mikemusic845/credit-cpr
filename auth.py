@@ -294,10 +294,20 @@ def show_user_dashboard():
             st.write(f"Reports Analyzed: {stats['reports_analyzed']}/1")
             if stats['reports_analyzed'] >= 1:
                 st.warning("⚠️ Free tier limit reached")
-                if st.button("🚀 Upgrade to Premium", use_container_width=True):
-                    st.info("Premium plans coming soon!")
+                
+                # ADD THIS: Upgrade button
+                import stripe_integration
+                if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
+                    st.session_state.show_upgrade = True
+                    st.rerun()
         else:
             st.write(f"Reports Analyzed: {stats['reports_analyzed']}")
+            
+            # ADD THIS: Manage subscription button
+            import stripe_integration
+            if st.button("🔧 Manage Subscription", use_container_width=True):
+                st.session_state.show_manage = True
+                st.rerun()
         
         st.write(f"Disputes Purchased: {stats['disputes_purchased']}")
         
