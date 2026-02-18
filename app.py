@@ -446,18 +446,15 @@ def main():
         import password_reset
         if password_reset.handle_password_reset_flow():
             return  # Show reset form
-    
-    # Check if showing forgot password form
-    if st.session_state.get('show_forgot_password', False):
-        password_reset.show_forgot_password_form()
+        
+        # Check if showing forgot password form
+        if st.session_state.get('show_forgot_password', False):
+            password_reset.show_forgot_password_form()
+            return
+        
+        auth.show_login_page()
         return
-    
-    auth.show_login_page()
-    return
 
-# Show user dashboard in sidebar
-auth.show_user_dashboard()
-    
     # Show user dashboard in sidebar
     auth.show_user_dashboard()
 
