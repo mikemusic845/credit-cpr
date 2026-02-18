@@ -229,8 +229,15 @@ def show_login_page_original():
             email = st.text_input("Email", key="login_email")
             password = st.text_input("Password", type="password", key="login_password")
             submit = st.form_submit_button("Sign In", use_container_width=True)
-            
-            if submit:
+        
+        # Forgot password link
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔑 Forgot Password?", use_container_width=True):
+                st.session_state.show_forgot_password = True
+                st.rerun()
+        
+        if submit:
                 if not email or not password:
                     st.error("Please enter both email and password")
                 else:
