@@ -738,21 +738,6 @@ def main():
                         st.session_state.errors_found,
                         client
                     )
-    with tab3:
-        st.header("📈 Your Credit Building Plan")
-        
-        if not st.session_state.analysis_complete:
-            st.info("👈 Please upload and analyze a credit report first")
-        else:
-            if st.button("🚀 Generate My 90-Day Action Plan", type="primary", use_container_width=True):
-                client = get_anthropic_client()
-                
-                with st.spinner("🤖 AI is creating your personalized credit plan..."):
-                    plan = generate_credit_plan(
-                        st.session_state.credit_data,
-                        st.session_state.errors_found,
-                        client
-                    )
                 
                 st.success("[OK] Your plan is ready!")
                 st.markdown(plan)
