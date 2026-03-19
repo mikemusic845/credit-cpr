@@ -8,12 +8,8 @@ import requests
 import os
 from urllib.parse import urlencode
 
-# Google OAuth Configuration
-try:
-    GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", "")
-    GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", "")
-except:
- GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+# Google OAuth Configuration - using environment variables only (no st.secrets)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
 # OAuth URLs
@@ -21,9 +17,8 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-# Your app URLs (change for production)
-REDIRECT_URI = "os.getenv("https://credit-cpr.onrender.com")"  # Change to your domain
-# For production: REDIRECT_URI = "https://credit-cpr.onrender.com"
+# Redirect URI - reads from environment variable, defaults to production URL
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://credit-cpr.onrender.com")
 
 def get_google_auth_url():
     """Generate Google OAuth URL"""
@@ -46,7 +41,6 @@ def exchange_code_for_token(code):
         'redirect_uri': REDIRECT_URI,
         'grant_type': 'authorization_code'
     }
-    
     response = requests.post(GOOGLE_TOKEN_URL, data=data)
     return response.json()
 
@@ -58,48 +52,37 @@ def get_user_info(access_token):
 
 def handle_google_callback():
     """Handle OAuth callback from Google"""
-    # Check if we have a code in the URL
     try:
         params = st.query_params
     except AttributeError:
-        # Fallback for older Streamlit versions
         params = st.experimental_get_query_params()
-    
-    # Handle both dict and direct access
+
     code = None
     if isinstance(params, dict):
         code = params.get('code', [None])[0] if 'code' in params else None
     else:
         code = params.get('code', None)
-    
+
     if code:
-        
         try:
-            # Exchange code for token
             token_data = exchange_code_for_token(code)
-            
+
             if 'access_token' in token_data:
-                # Get user info
                 user_info = get_user_info(token_data['access_token'])
-                
-                # Create or login user
                 email = user_info.get('email')
                 name = user_info.get('name', '')
-                
+
                 if email:
-                    # Check if user exists or create new user
                     import auth
                     import sqlite3
-                    
+
                     conn = sqlite3.connect(auth.DB_PATH)
                     c = conn.cursor()
-                    
-                    # Check if user exists
+
                     c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
                     user = c.fetchone()
-                    
+
                     if user:
-                        # User exists - log them in
                         user_data = {
                             'id': user[0],
                             'email': user[1],
@@ -111,15 +94,12 @@ def handle_google_callback():
                         st.session_state.user = user_data
                         st.success(f"✅ Signed in with Google as {email}")
                     else:
-                        # Create new user
                         import secrets
                         random_password = secrets.token_urlsafe(32)
                         password_hash = auth.hash_password(random_password)
-                        
                         c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
                         user_id = c.lastrowid
                         conn.commit()
-                        
                         user_data = {
                             'id': user_id,
                             'email': email,
@@ -130,37 +110,34 @@ def handle_google_callback():
                         st.session_state.authenticated = True
                         st.session_state.user = user_data
                         st.success(f"✅ Account created with Google! Welcome {name}!")
-                    
+
                     conn.close()
-                    
-                    # Clear the code from URL
+
                     try:
                         st.query_params.clear()
                     except:
                         st.experimental_set_query_params()
+
                     st.rerun()
                 else:
                     st.error("Could not get email from Google")
             else:
                 st.error("Failed to get access token from Google")
-                
+
         except Exception as e:
             st.error(f"Error during Google sign-in: {str(e)}")
-        
-        # Clear the code parameter
-        try:
-            st.query_params.clear()
-        except:
-            st.experimental_set_query_params()
+            try:
+                st.query_params.clear()
+            except:
+                st.experimental_set_query_params()
 
 def show_google_login_button():
     """Show Google Sign-In button"""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         return
-    
-    # Custom styled Google button
+
     google_auth_url = get_google_auth_url()
-    
+
     st.markdown(f"""
     <div style='text-align: center; margin: 20px 0;'>
         <a href='{google_auth_url}' target='_self' style='text-decoration: none;'>
@@ -189,7 +166,6 @@ def show_google_login_button():
             </div>
         </a>
     </div>
-    
     <div style='text-align: center; margin: 20px 0; color: #666;'>
         <span style='background: white; padding: 0 10px; position: relative; z-index: 1;'>or</span>
         <hr style='margin-top: -12px; border: 1px solid #ddd;'>
@@ -198,64 +174,63 @@ def show_google_login_button():
 
 def show_login_page_with_google():
     """Display login/signup page with Google Auth"""
-    
-    # Handle Google OAuth callback
     handle_google_callback()
-    
+
     st.markdown("## Welcome to Credit CPR")
     st.write("Sign in to access your AI-powered credit repair assistant")
-    
-    # Google Sign-In button
+
     show_google_login_button()
-    
-    # Regular email/password tabs
+
     tab1, tab2 = st.tabs(["Sign In", "Create Account"])
-    
+
     with tab1:
         with st.form("login_form"):
             email = st.text_input("Email", key="login_email")
             password = st.text_input("Password", type="password", key="login_password")
             submit = st.form_submit_button("Sign In", use_container_width=True)
-            
-            if submit:
-                if not email or not password:
-                    st.error("Please enter both email and password")
+
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔑 Forgot Password?", use_container_width=True):
+                st.session_state.show_forgot_password = True
+                st.rerun()
+
+        if submit:
+            if not email or not password:
+                st.error("Please enter both email and password")
+            else:
+                import auth
+                success, user_data = auth.authenticate_user(email, password)
+                if success:
+                    st.session_state.authenticated = True
+                    st.session_state.user = user_data
+                    st.success("✅ Logged in successfully!")
+                    st.rerun()
                 else:
-                    import auth
-                    success, user_data = auth.authenticate_user(email, password)
-                    if success:
-                        st.session_state.authenticated = True
-                        st.session_state.user = user_data
-                        st.success("✅ Logged in successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid email or password")
-    
+                    st.error("❌ Invalid email or password")
+
     with tab2:
         with st.form("signup_form"):
             new_email = st.text_input("Email", key="signup_email")
             new_password = st.text_input("Password", type="password", key="signup_password")
             confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
-            
             st.caption("Password must be at least 8 characters")
-            
             agree = st.checkbox("I agree that Credit CPR is an educational assistant, not a credit repair service")
-            
             submit = st.form_submit_button("Create Account", use_container_width=True)
-            
-            if submit:
-                if not agree:
-                    st.error("Please agree to the terms")
-                elif len(new_password) < 8:
-                    st.error("Password must be at least 8 characters")
-                elif new_password != confirm_password:
-                    st.error("Passwords don't match")
-                elif not new_email or '@' not in new_email:
-                    st.error("Please enter a valid email")
+
+        if submit:
+            if not agree:
+                st.error("Please agree to the terms")
+            elif len(new_password) < 8:
+                st.error("Password must be at least 8 characters")
+            elif new_password != confirm_password:
+                st.error("Passwords don't match")
+            elif not new_email or '@' not in new_email:
+                st.error("Please enter a valid email")
+            else:
+                import auth
+                success, message = auth.create_user(new_email, new_password)
+                if success:
+                    st.success("✅ Account created! Please sign in.")
                 else:
-                    import auth
-                    success, message = auth.create_user(new_email, new_password)
-                    if success:
-                        st.success("✅ Account created! Please sign in.")
-                    else:
-                        st.error(f"❌ {message}")
+                    st.error(f"❌ {message}")
