@@ -13,8 +13,8 @@ try:
     GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", "")
 except:
-    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
 # OAuth URLs
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -22,7 +22,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 # Your app URLs (change for production)
-REDIRECT_URI = "http://localhost:8501"  # Change to your domain
+REDIRECT_URI = "os.getenv("https://credit-cpr.onrender.com")"  # Change to your domain
 # For production: REDIRECT_URI = "https://credit-cpr.onrender.com"
 
 def get_google_auth_url():
