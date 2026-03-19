@@ -554,7 +554,10 @@ def main():
         st.caption("💡 **Tip:** Fill this out before uploading your report")
     
     # Main content area
-    tab1, tab2, tab3 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan",
+    "💬 AI Assistant", "📊 Score Tracker", "🔔 Reminders & Email"
+    ])
     
     with tab1:
         st.header("Step 1: Upload Your Credit Report")
@@ -735,7 +738,22 @@ def main():
                         st.session_state.errors_found,
                         client
                     )
-                
+    with tab4:
+        from chat_assistant import show_chat_assistant
+        show_chat_assistant()
+
+    with tab5:
+        from score_tracker import show_score_tracker
+        show_score_tracker()
+
+    with tab6:
+        from dispute_tools import show_email_sender, show_reminders
+
+        subtab1, subtab2 = st.tabs(["📬 Email Dispute Letters", "🔔 Follow-Up Reminders"])
+        with subtab1:
+            show_email_sender()
+        with subtab2:
+            show_reminders()                 
                 st.success("[OK] Your plan is ready!")
                 st.markdown(plan)
                 
