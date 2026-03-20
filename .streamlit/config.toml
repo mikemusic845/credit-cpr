@@ -1,0 +1,9 @@
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+serverAddress = "credit-cpr.onrender.com"
+serverPort = 443
+gatherUsageStats = false
