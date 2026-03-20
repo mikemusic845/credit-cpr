@@ -103,10 +103,20 @@ def show_chat_assistant():
         process_message(user_input)
         st.rerun()
 
-    # Chat input
-    user_input = st.chat_input("Ask a credit question...")
-    if user_input:
-        process_message(user_input)
+    # Chat input (using text_input + button since st.chat_input can't be inside tabs)
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input(
+            "Your question",
+            placeholder="Ask a credit question...",
+            label_visibility="collapsed",
+            key="chat_input_box"
+        )
+    with col2:
+        send_clicked = st.button("Send 💬", use_container_width=True, type="primary")
+
+    if send_clicked and user_input and user_input.strip():
+        process_message(user_input.strip())
         st.rerun()
 
     # Clear chat button
