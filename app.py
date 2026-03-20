@@ -1,806 +1,395 @@
 """
-AI Credit Repair Specialist - MVP
-A tool to analyze credit reports and generate dispute letters using AI
+Authentication System for Credit CPR
+Uses PostgreSQL (Supabase) for persistent storage
 """
 
 import streamlit as st
-import json
-import os
-from io import BytesIO
-from docx import Document
-from docx.shared import Pt, Inches
+import hashlib
+import secrets
 from datetime import datetime
-import PyPDF2
-import base64
-import auth  # Authentication system
-import auth
+import os
 
-def get_shield_base64():
-    with open("assets/shield.png", "rb") as f:
-        return base64.b64encode(f.read()).decode()
+# Database connection
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-# Page config
-st.set_page_config(
-    page_title="Credit CPR - AI Credit Repair Assistant",
-    page_icon="assets/shield.png",
-    layout="wide",
-    initial_sidebar_state="expanded"
-    )
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-st.markdown("""
-<style>
 
-/* Fix tab background conflicts without overriding theme */
-button[data-baseweb="tab"] {
-    background-color: transparent !important;
-}
+def get_conn():
+    """Get a database connection"""
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
-button[data-baseweb="tab"] p {
-    color: inherit !important;
-}
 
-button[data-baseweb="tab"][aria-selected="true"] p {
-    font-weight: 600;
-}
+def init_database():
+    """Initialize the database tables"""
+    conn = get_conn()
+    c = conn.cursor()
 
-</style>
-""", unsafe_allow_html=True)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            plan TEXT DEFAULT 'free',
+            reports_analyzed INTEGER DEFAULT 0,
+            disputes_purchased INTEGER DEFAULT 0
+        )
+    ''')
 
-# Initialize session state
-if 'analysis_complete' not in st.session_state:
-    st.session_state.analysis_complete = False
-if 'errors_found' not in st.session_state:
-    st.session_state.errors_found = []
-if 'credit_data' not in st.session_state:
-    st.session_state.credit_data = None
-if 'user_info' not in st.session_state:
-    st.session_state.user_info = {}
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS analysis_history (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            report_name TEXT,
+            errors_found INTEGER,
+            analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
 
-    # Custom CSS for Credit CPR branding
-st.markdown("""
-<style>
-    /* Credit CPR Color Theme */
-    :root {
-        --primary-color: #2E8B57;  /* Green from logo */
-        --secondary-color: #1B3A5C;  /* Navy blue from logo */
-        --accent-color: #7CB342;  /* Bright green */
-    }
-    
-    /* Header styling */
-    .main-header {
-        background: linear-gradient(135deg, #1B3A5C 0%, #2E8B57 100%);
-        padding: 2rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
-        text-align: center;
-    }
-    
-    .logo-container {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 1rem;
-    }
-    
-    .hero-title {
-        color: white;
-        font-size: 2.5rem;
-        font-weight: bold;
-        margin: 0;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-    }
-    
-    .hero-tagline {
-        color: #7CB342;
-        font-size: 1.5rem;
-        font-style: italic;
-        margin: 0.5rem 0;
-    }
-    
-    .hero-subtext {
-        color: rgba(255,255,255,0.9);
-        font-size: 1rem;
-        margin-top: 1rem;
-    }
-    
-    /* Button styling */
-    .stButton>button {
-        background: linear-gradient(135deg, #2E8B57 0%, #7CB342 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        transition: transform 0.2s;
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(46, 139, 87, 0.4);
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        background-color: #f0f8f0;
-        border-left: 4px solid #2E8B57;
-    }
-    
-    /* Tab styling - Fixed with borders */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background-color: #f0f8f0;
-        border-radius: 8px 8px 0 0;
-        border-top: 2px solid #2E8B57;
-        border-left: 2px solid #2E8B57;
-        border-right: 2px solid #2E8B57;
-        border-bottom: none;
-        padding: 12px 20px;
-        white-space: nowrap;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #2E8B57 0%, #7CB342 100%);
-        color: white;
-        border-top: 2px solid #1B3A5C;
-        border-left: 2px solid #1B3A5C;
-        border-right: 2px solid #1B3A5C;
-    }
-    
-    /* Footer */
-    .credit-cpr-footer {
-        text-align: center;
-        padding: 2rem;
-        margin-top: 3rem;
-        border-top: 2px solid #2E8B57;
-        color: #1B3A5C;
-    }
-</style>
-""", unsafe_allow_html=True)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS dispute_letters (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            bureau TEXT,
+            error_description TEXT,
+            status TEXT DEFAULT 'draft',
+            purchased BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
 
-# Initialize Anthropic client
-def get_anthropic_client():
-    # Try multiple ways to get the API key
-    api_key = None
-    
-    # Method 1: Streamlit secrets
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS score_history (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            score INTEGER NOT NULL,
+            bureau TEXT NOT NULL,
+            note TEXT,
+            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS dispute_reminders (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            bureau TEXT NOT NULL,
+            dispute_description TEXT,
+            sent_date TEXT NOT NULL,
+            follow_up_date TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+
+def hash_password(password: str) -> str:
+    """Hash password with salt"""
+    salt = secrets.token_hex(16)
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return salt + pwd_hash.hex()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify password against hash"""
+    salt = password_hash[:32]
+    stored_hash = password_hash[32:]
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return pwd_hash.hex() == stored_hash
+
+
+def create_user(email: str, password: str) -> tuple:
+    """Create a new user account"""
     try:
-        api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
-    except:
-        pass
-    
-    # Method 2: Environment variable
-    if not api_key:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    
-    # Check if we got a valid key
-    if not api_key or api_key == "":
-        st.error("**API Key Not Found!**")
-        st.info("""
-        Please set up your Anthropic API key using ONE of these methods:
-        
-        **Method 1: Streamlit Secrets (Recommended)**
-        1. Create folder: `.streamlit` 
-        2. Create file: `.streamlit/secrets.toml`
-        3. Add this line:
-        ```
-        ANTHROPIC_API_KEY = "sk-ant-your-key-here"
-        ```
-        
-        **Method 2: Environment Variable**
-        Run this before starting the app:
-        ```
-        export ANTHROPIC_API_KEY="sk-ant-your-key-here"
-        ```
-        
-        **Get your API key:** https://console.anthropic.com/
-        """)
-        st.stop()
-    
-    # Validate key format
-    if not api_key.startswith("sk-ant-"):
-        st.error(f"Invalid API key format. Key should start with 'sk-ant-' but yours starts with '{api_key[:7]}'")
-        st.stop()
-    
-    # Try to import and initialize Anthropic
-    try:
-        from anthropic import Anthropic
-        client = Anthropic(api_key=api_key)
-        return client
-    except ImportError:
-        st.error("Anthropic library not installed properly!")
-        st.info("Run this command: `pip install anthropic`")
-        st.stop()
+        conn = get_conn()
+        c = conn.cursor()
+        password_hash = hash_password(password)
+        c.execute('INSERT INTO users (email, password_hash) VALUES (%s, %s)', (email, password_hash))
+        conn.commit()
+        conn.close()
+        return True, "Account created successfully!"
+    except psycopg2.errors.UniqueViolation:
+        return False, "Email already exists"
     except Exception as e:
-        st.error(f"Error initializing Anthropic client: {str(e)}")
-        st.info("Try reinstalling: `pip install --upgrade anthropic`")
-        st.stop()
+        return False, f"Error: {str(e)}"
 
-# PDF Parser
-def extract_text_from_pdf(pdf_file):
-    """Extract text from uploaded PDF"""
+
+def authenticate_user(email: str, password: str) -> tuple:
+    """Authenticate user and return user data"""
     try:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
-        return text
-    except Exception as e:
-        st.error(f"Error reading PDF: {str(e)}")
-        return None
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute(
+            'SELECT id, email, password_hash, plan, reports_analyzed, disputes_purchased FROM users WHERE email = %s',
+            (email,)
+        )
+        user = c.fetchone()
+        conn.close()
 
-# AI Functions
-def parse_credit_report_with_ai(raw_text, client):
-    """Use AI to structure the credit report data"""
-    prompt = f"""Analyze this credit report text and extract key information into a structured JSON format.
-
-Extract:
-1. Personal Information (name, addresses, SSN if present, DOB)
-2. Accounts (creditor name, account number, balance, status, payment history)
-3. Inquiries (company name, date)
-4. Public Records (bankruptcies, collections, judgments)
-5. Negative Items (late payments, charge-offs, etc.)
-
-Credit Report Text:
-{raw_text[:15000]}  
-
-Return ONLY valid JSON with this structure:
-{{
-  "personal_info": {{"name": "", "addresses": [], "ssn_last4": "", "dob": ""}},
-  "accounts": [{{"creditor": "", "account_num": "", "balance": 0, "status": "", "payment_history": ""}}],
-  "inquiries": [{{"company": "", "date": ""}}],
-  "public_records": [{{"type": "", "status": "", "date": ""}}],
-  "negative_items": [{{"description": "", "date": ""}}]
-}}"""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    try:
-        # Extract JSON from response
-        response_text = message.content[0].text
-        # Clean up any markdown code blocks
-        response_text = response_text.replace("```json", "").replace("```", "").strip()
-        return json.loads(response_text)
-    except:
-        # Return basic structure if parsing fails
-        return {
-            "personal_info": {"name": "Unable to parse", "addresses": [], "ssn_last4": "", "dob": ""},
-            "accounts": [],
-            "inquiries": [],
-            "public_records": [],
-            "negative_items": []
-        }
-
-def analyze_for_errors(credit_data, client):
-    """Analyze credit report for errors and FCRA violations"""
-    prompt = f"""You are a credit repair specialist. Analyze this credit report data for errors and FCRA violations.
-
-Credit Report Data:
-{json.dumps(credit_data, indent=2)}
-
-Identify:
-1. Personal information errors (wrong name, address, SSN, DOB)
-2. Duplicate accounts (same debt listed multiple times)
-3. Accounts that may not belong to the user
-4. Incorrect balances or limits
-5. Obsolete information (debts older than 7 years, bankruptcies older than 10 years)
-6. Unauthorized hard inquiries
-7. Inaccurate payment history
-8. Medical debt under $500 (should be removed per 2023 rules)
-9. Any other FCRA violations
-
-For EACH error found, return JSON in this format:
-{{
-  "errors": [
-    {{
-      "id": "ERR001",
-      "category": "Account Error",
-      "severity": "High/Medium/Low",
-      "description": "Brief description of the error",
-      "fcra_violation": "Specific FCRA section violated",
-      "affected_item": "Account or item name",
-      "dispute_strategy": "How to dispute this",
-      "success_likelihood": 75,
-      "potential_impact": "Points impact if removed"
-    }}
-  ]
-}}
-
-Return ONLY valid JSON."""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    try:
-        response_text = message.content[0].text
-        response_text = response_text.replace("```json", "").replace("```", "").strip()
-        result = json.loads(response_text)
-        return result.get("errors", [])
-    except:
-        return []
-
-def generate_dispute_letter(error, user_info, bureau_name, client):
-    """Generate a personalized dispute letter"""
-    prompt = f"""Generate a professional credit dispute letter for the following error:
-
-Error Details:
-{json.dumps(error, indent=2)}
-
-User Information:
-Name: {user_info.get('name', 'John Doe')}
-Address: {user_info.get('address', '123 Main St, City, ST 12345')}
-SSN Last 4: {user_info.get('ssn_last4', 'XXXX')}
-DOB: {user_info.get('dob', 'MM/DD/YYYY')}
-
-Bureau: {bureau_name}
-
-Generate a complete dispute letter that:
-1. Uses proper business letter format
-2. Cites specific FCRA sections (particularly Section 611 and 1681e(b))
-3. Clearly describes the error
-4. Requests investigation within 30 days
-5. Demands correction or deletion
-6. Maintains professional, assertive tone
-7. Mentions sending via certified mail
-8. Requests written confirmation
-
-Return the complete letter text."""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    return message.content[0].text
-
-def create_letter_docx(letter_text, filename="dispute_letter.docx"):
-    """Create a downloadable Word document"""
-    doc = Document()
-    
-    # Set margins
-    sections = doc.sections
-    for section in sections:
-        section.top_margin = Inches(1)
-        section.bottom_margin = Inches(1)
-        section.left_margin = Inches(1)
-        section.right_margin = Inches(1)
-    
-    # Add content
-    for line in letter_text.split('\n'):
-        p = doc.add_paragraph(line)
-        p.style.font.size = Pt(12)
-        p.style.font.name = 'Times New Roman'
-    
-    # Save to BytesIO
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-def get_logo_base64():
-    """Convert logo to base64 for embedding in HTML"""
-    import base64
-    try:
-        with open("logo.png", "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    except:
-        return ""
-
-def generate_credit_plan(credit_data, errors, client):
-    """Generate a personalized 90-day credit building plan"""
-    prompt = f"""Create a personalized 90-day credit building action plan based on this credit profile:
-
-Credit Data Summary:
-- Number of accounts: {len(credit_data.get('accounts', []))}
-- Negative items: {len(credit_data.get('negative_items', []))}
-- Errors found: {len(errors)}
-- Public records: {len(credit_data.get('public_records', []))}
-
-Errors to dispute:
-{json.dumps(errors[:5], indent=2)}
-
-Create a practical, actionable 90-day plan with:
-1. Month 1: Immediate actions (dispute letters, basic cleanup)
-2. Month 2: Building positive history (payment strategies, authorized user, secured card)
-3. Month 3: Optimization (credit limit increases, follow-ups)
-
-Include specific weekly action items, tips for credit mix, and budget recommendations.
-Format it clearly with headers and bullet points."""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=3000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    return message.content[0].text
-
-# Main App UI
-def main():
-    # Initialize session states
-    if 'show_landing' not in st.session_state:
-        st.session_state.show_landing = True
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-        
-    if 'user' not in st.session_state:
-        st.session_state.user = None
-    
-    # Show landing page first (if not authenticated)
-    if st.session_state.show_landing and not st.session_state.authenticated:
-        from landing_page import landing_page
-        landing_page()
-        return
-    
-    # Show login if not authenticated
-    if not st.session_state.authenticated:
-        # Check for password reset flow
-        import password_reset
-        if password_reset.handle_password_reset_flow():
-            return  # Show reset form
-        
-        # Check if showing forgot password form
-        if st.session_state.get('show_forgot_password', False):
-            password_reset.show_forgot_password_form()
-            return
-        
-        auth.show_login_page()
-        return
-
-    # Show user dashboard in sidebar
-    auth.show_user_dashboard()
-
-    # Admin panel for admins
-    import admin_system
-    if admin_system.is_admin(st.session_state.user['email']):
-        admin_system.show_admin_panel()
-   
-    # Handle upgrade modal
-    import stripe_integration
-    
-    # Check for checkout success/cancel
-    stripe_integration.handle_checkout_success()
-    
-    # Show upgrade modal if requested
-    if st.session_state.get('show_upgrade', False):
-        st.markdown("## 🚀 Choose Your Plan")
-        stripe_integration.show_upgrade_options()
-        
-        if st.button("← Back to Dashboard"):
-            st.session_state.show_upgrade = False
-            st.rerun()
-        
-        st.stop()  # Don't show main app
-    
-    # Show subscription management if requested
-    if st.session_state.get('show_manage', False):
-        st.markdown("## 🔧 Manage Your Subscription")
-        stripe_integration.show_manage_subscription()
-        
-        if st.button("← Back to Dashboard"):
-            st.session_state.show_manage = False
-            st.rerun()
-        
-        st.stop()  # Don't show main app
-    # Credit CPR Branded Header
-    st.markdown("""
-    <div class="main-header">
-        <div class="logo-container">
-            <img src="data:image/png;base64,{}" width="400" alt="Credit CPR Logo">
-        </div>
-        <h1 class="hero-title">Credit CPR - AI Credit Repair Assistant</h1>
-        <p class="hero-tagline">Bringing Your Credit Back to Life</p>
-        <p class="hero-subtext">Analyze credit reports, identify FCRA violations, and generate professional dispute letters - powered by AI.</p>
-    </div>
-    """.format(get_logo_base64()), unsafe_allow_html=True)
-    
-    # Critical disclaimer
-    with st.expander("IMPORTANT LEGAL NOTICE - READ BEFORE USING", expanded=True):
-        st.warning("""
-        **THIS TOOL PROVIDES EDUCATIONAL INFORMATION ONLY**
-        
-        This application is NOT:
-        - Legal advice or a substitute for an attorney
-        - A credit repair organization (as defined by CRORA)
-        - A guarantee of specific results
-        - Financial advice
-        
-        We do NOT:
-        - Charge fees for credit repair services
-        - Make promises about outcomes
-        - Store your credit report or personal data
-        - Advise you to make false statements
-        
-        You have the right to dispute inaccurate information yourself for FREE under the Fair Credit Reporting Act (FCRA).
-        
-        For legal matters, consult a licensed attorney. This tool helps you understand your rights and exercise them yourself.
-        """)
-    
-    # Sidebar for user information
-    with st.sidebar:
-        col1, col2 = st.columns([1, 4])
-
-        with col1:
-            st.image("assets/shield.png", width=26)
-
-        with col2:
-            st.markdown("### Your Information")
-
-        st.caption("Used to personalize dispute letters")
-
-        user_name = st.text_input("Full Legal Name", value=st.session_state.user_info.get('name', ''))
-        user_address = st.text_area("Current Address", value=st.session_state.user_info.get('address', ''))
-        user_ssn = st.text_input("Last 4 of SSN (Optional)", max_chars=4, value=st.session_state.user_info.get('ssn_last4', ''))
-        user_dob = st.text_input("Date of Birth (MM/DD/YYYY)", value=st.session_state.user_info.get('dob', ''))
-        
-        if st.button("Save Information", use_container_width=True):
-            st.session_state.user_info = {
-                'name': user_name,
-                'address': user_address,
-                'ssn_last4': user_ssn,
-                'dob': user_dob
+        if user and verify_password(password, user[2]):
+            return True, {
+                'id': user[0],
+                'email': user[1],
+                'plan': user[3],
+                'reports_analyzed': user[4],
+                'disputes_purchased': user[5]
             }
-            st.success("[OK] Information saved!")
-        
-        st.divider()
-        st.caption("💡 **Tip:** Fill this out before uploading your report")
-    
-    # Main content area
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan",
-    "💬 AI Assistant", "📊 Score Tracker", "🔔 Reminders & Email"
-    ])
-    
-    with tab1:
-        st.header("Step 1: Upload Your Credit Report")
-        st.info("📄 Upload a PDF from Equifax, Experian, TransUnion, or AnnualCreditReport.com")
-        
-        uploaded_file = st.file_uploader("Choose your credit report PDF", type=['pdf'])
-        
-        if uploaded_file is not None:
-            with st.spinner("📖 Reading PDF..."):
-                raw_text = extract_text_from_pdf(uploaded_file)
-            
-            if raw_text:
-                st.success("[OK] PDF loaded successfully!")
-                
-                with st.expander("📄 View extracted text (first 1000 characters)"):
-                    st.text(raw_text[:1000] + "...")
-                
-                if st.button("🔍 Analyze Credit Report with AI", type="primary", use_container_width=True):
-                    # CHECK USAGE LIMITS
-                    user_id = st.session_state.user['id']
-                    can_analyze, message = auth.can_analyze_report(user_id)
-                    
-                    if not can_analyze:
-                        st.error(message)
-                        
-                        import stripe_integration
-                        if st.button("🚀 Upgrade to Basic ($19/mo) or Pro ($29/mo)", type="primary", use_container_width=True):
-                           st.session_state.show_upgrade = True
-                           st.rerun()
-        
-                        st.stop()
-                    
-                    st.info(message)  # Show remaining analyses
-                    
-                    client = get_anthropic_client()
-                    
-                    # Parse the report
-                    with st.spinner("🤖 AI is structuring your credit report data..."):
-                        credit_data = parse_credit_report_with_ai(raw_text, client)
-                        st.session_state.credit_data = credit_data
-                    
-                    st.success("✅ Report structured!")
-                    
-                    # Show parsed data
-                    with st.expander("📊 Structured Credit Data"):
-                        st.json(credit_data)
-                    
-                    # Analyze for errors
-                    with st.spinner("🔍 Analyzing for errors and FCRA violations..."):
-                        errors = analyze_for_errors(credit_data, client)
-                        st.session_state.errors_found = errors
-                        st.session_state.analysis_complete = True
-                    
-                    # RECORD THE ANALYSIS
-                    auth.record_analysis(user_id, uploaded_file.name, len(errors))
-                    
-                    if errors:
-                        st.balloons()
-                        st.success(f"🎯 Found {len(errors)} potential issues to dispute!")
-                    else:
-                        st.info("No obvious errors detected, but you can still review your report manually.")
-        
-        # Display errors if analysis is complete
-        if st.session_state.analysis_complete and st.session_state.errors_found:
-            st.divider()
-            st.header("🎯 Errors & Issues Found")
-            
-            for idx, error in enumerate(st.session_state.errors_found):
-                severity_color = {
-                    "High": "🔴",
-                    "Medium": "🟡", 
-                    "Low": "🟢"
-                }.get(error.get('severity', 'Medium'), "⚪")
-                
-                with st.expander(f"{severity_color} {error.get('category', 'Error')} - {error.get('description', 'Unknown issue')[:80]}..."):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.write(f"**Severity:** {error.get('severity', 'N/A')}")
-                        st.write(f"**Category:** {error.get('category', 'N/A')}")
-                        st.write(f"**Affected Item:** {error.get('affected_item', 'N/A')}")
-                    
-                    with col2:
-                        st.write(f"**Success Likelihood:** {error.get('success_likelihood', 'N/A')}%")
-                        st.write(f"**Potential Impact:** {error.get('potential_impact', 'N/A')}")
-                    
-                    st.write(f"**Description:** {error.get('description', 'No description')}")
-                    st.write(f"**FCRA Violation:** {error.get('fcra_violation', 'N/A')}")
-                    st.write(f"**Dispute Strategy:** {error.get('dispute_strategy', 'N/A')}")
-    
-    with tab2:
-        st.header("📝 Generate Dispute Letters")
-        
-        if not st.session_state.analysis_complete:
-            st.info("👈 Please upload and analyze a credit report first")
-        elif not st.session_state.errors_found:
-            st.info("No errors were found to dispute")
-        else:
-            st.write(f"**{len(st.session_state.errors_found)} errors ready to dispute**")
-            
-            # Bureau selection
-            bureau = st.selectbox(
-                "Select Credit Bureau",
-                ["Equifax", "Experian", "TransUnion"]
-            )
-            
-            # Error selection
-            error_options = [
-                f"{e.get('category', 'Error')} - {e.get('description', 'Unknown')[:60]}" 
-                for e in st.session_state.errors_found
-            ]
-            
-            selected_error_idx = st.selectbox(
-                "Select Error to Dispute",
-                range(len(error_options)),
-                format_func=lambda x: error_options[x]
-            )
-            
-            selected_error = st.session_state.errors_found[selected_error_idx]
-            
-            # Show error details
-            with st.expander("📋 Error Details"):
-                st.json(selected_error)
-            
-            # Generate letter button
-            if st.button("✍️ Generate Dispute Letter", type="primary", use_container_width=True):
-                if not st.session_state.user_info.get('name'):
-                    st.warning("Please fill in your information in the sidebar first")
-                else:
-                    client = get_anthropic_client()
-                    
-                    with st.spinner("✍️ AI is writing your dispute letter..."):
-                        letter_text = generate_dispute_letter(
-                            selected_error,
-                            st.session_state.user_info,
-                            bureau,
-                            client
-                        )
-                    
-                    st.success("[OK] Letter generated!")
-                    
-                    # Display letter
-                    st.text_area("Your Dispute Letter", letter_text, height=400)
-                    
-                    # Download button
-                    doc_buffer = create_letter_docx(letter_text)
-                    st.download_button(
-                        label="📥 Download as Word Document",
-                        data=doc_buffer,
-                        file_name=f"dispute_letter_{bureau}_{datetime.now().strftime('%Y%m%d')}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True
-                    )
-                    
-                    st.divider()
-                    st.info("""
-                    **Next Steps:**
-                    1. Review the letter carefully
-                    2. Gather supporting documents (if any)
-                    3. Print and sign the letter
-                    4. Send via **Certified Mail** with return receipt
-                    5. Keep copies of everything
-                    6. Bureau has 30 days to investigate
-                    """)
-    
-    with tab3:
-        st.header("📈 Your Credit Building Plan")
-        
-        if not st.session_state.analysis_complete:
-            st.info("👈 Please upload and analyze a credit report first")
-        else:
-            if st.button("🚀 Generate My 90-Day Action Plan", type="primary", use_container_width=True):
-                client = get_anthropic_client()
-                
-                with st.spinner("🤖 AI is creating your personalized credit plan..."):
-                    plan = generate_credit_plan(
-                        st.session_state.credit_data,
-                        st.session_state.errors_found,
-                        client
-                    )
-                
-                st.success("[OK] Your plan is ready!")
-                st.markdown(plan)
-                
-                # Download plan
-                plan_buffer = create_letter_docx(plan, "credit_building_plan.docx")
-                st.download_button(
-                    label="📥 Download Plan as Word Document",
-                    data=plan_buffer,
-                    file_name=f"credit_plan_{datetime.now().strftime('%Y%m%d')}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
-    with tab4:
-        from chat_assistant import show_chat_assistant
-        show_chat_assistant()
+        return False, {}
+    except Exception as e:
+        return False, {}
 
-    with tab5:
-        from score_tracker import show_score_tracker
-        show_score_tracker()
 
-    with tab6:
-        from dispute_tools import show_email_sender, show_reminders
-        subtab1, subtab2 = st.tabs(["📬 Email Dispute Letters", "🔔 Follow-Up Reminders"])
-        with subtab1:
-            show_email_sender()
-        with subtab2:
-            show_reminders()
-    
-    # Footer
-    st.markdown(
-        """
-        <hr style="margin-top: 40px; margin-bottom: 20px;">
+def get_user_stats(user_id: int) -> dict:
+    """Get user statistics"""
+    conn = get_conn()
+    c = conn.cursor()
 
-        <div style="text-align: center;">
+    c.execute('SELECT COUNT(*) FROM analysis_history WHERE user_id = %s', (user_id,))
+    analyses = c.fetchone()[0]
 
-        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px;">
-            <img src="data:image/png;base64,{}" width="32">
-            <h3 style="margin: 0;">
-                Credit CPR - AI Credit Repair Assistant
-            </h3>
-        </div>
+    c.execute('SELECT COUNT(*) FROM dispute_letters WHERE user_id = %s AND purchased = TRUE', (user_id,))
+    disputes = c.fetchone()[0]
 
-        <p style="font-weight: 600; margin-bottom: 8px;">
-            Bringing Your Credit Back to Life
-        </p>
+    c.execute('SELECT plan, reports_analyzed, disputes_purchased FROM users WHERE id = %s', (user_id,))
+    user_data = c.fetchone()
+    conn.close()
 
-        <p style="font-size: 13px; opacity: 0.75;">
-            Built to help you exercise your FCRA rights | Not affiliated with any credit bureau
-        </p>
+    return {
+        'total_analyses': analyses,
+        'total_disputes': disputes,
+        'plan': user_data[0],
+        'reports_analyzed': user_data[1],
+        'disputes_purchased': user_data[2]
+    }
 
-        <p style="font-size: 13px; opacity: 0.75;">
-            This tool does not store your credit report or personal information
-        </p>
 
-        <p style="margin-top: 1rem; font-size: 13px; font-weight: 600;">
-            © 2026 Credit CPR. All rights reserved.
-        </p>
+def can_analyze_report(user_id: int) -> tuple:
+    """Check if user can analyze another report"""
+    stats = get_user_stats(user_id)
 
-        </div>
-        """.format(get_shield_base64()),
-        unsafe_allow_html=True
+    if stats['plan'] in ('premium', 'pro', 'basic'):
+        return True, "Unlimited analyses"
+
+    if stats['reports_analyzed'] >= 1:
+        return False, "Free tier limit reached (1 report). Upgrade for unlimited analyses."
+
+    return True, f"You have {1 - stats['reports_analyzed']} analysis remaining"
+
+
+def record_analysis(user_id: int, report_name: str, errors_found: int):
+    """Record a credit report analysis"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        'INSERT INTO analysis_history (user_id, report_name, errors_found) VALUES (%s, %s, %s)',
+        (user_id, report_name, errors_found)
     )
+    c.execute('UPDATE users SET reports_analyzed = reports_analyzed + 1 WHERE id = %s', (user_id,))
+    conn.commit()
+    conn.close()
 
-if __name__ == "__main__":
-    main()
+
+def save_dispute_letter(user_id: int, bureau: str, error_description: str) -> int:
+    """Save a dispute letter"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        'INSERT INTO dispute_letters (user_id, bureau, error_description) VALUES (%s, %s, %s) RETURNING id',
+        (user_id, bureau, error_description)
+    )
+    letter_id = c.fetchone()[0]
+    conn.commit()
+    conn.close()
+    return letter_id
+
+
+def purchase_dispute_letter(user_id: int, letter_id: int):
+    """Mark dispute letter as purchased"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        'UPDATE dispute_letters SET purchased = TRUE, status = %s WHERE id = %s AND user_id = %s',
+        ('ready', letter_id, user_id)
+    )
+    c.execute('UPDATE users SET disputes_purchased = disputes_purchased + 1 WHERE id = %s', (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_user_disputes(user_id: int):
+    """Get all dispute letters for a user"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        '''SELECT id, bureau, error_description, status, purchased, created_at
+           FROM dispute_letters WHERE user_id = %s ORDER BY created_at DESC''',
+        (user_id,)
+    )
+    disputes = c.fetchall()
+    conn.close()
+    return disputes
+
+
+def update_user_plan(user_id: int, plan: str):
+    """Update a user's plan"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('UPDATE users SET plan = %s WHERE id = %s', (plan, user_id))
+    conn.commit()
+    conn.close()
+    # Update session state if this is the current user
+    if st.session_state.get('user') and st.session_state.user['id'] == user_id:
+        st.session_state.user['plan'] = plan
+
+
+def get_all_users():
+    """Get all users (admin only)"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased, created_at FROM users ORDER BY created_at DESC')
+    users = c.fetchall()
+    conn.close()
+    return users
+
+
+# Streamlit Auth UI Components
+
+def show_login_page():
+    """Display login/signup page with Google Auth"""
+    try:
+        from google_auth import show_login_page_with_google
+        show_login_page_with_google()
+    except ImportError:
+        show_login_page_original()
+
+
+def show_login_page_original():
+    """Display login/signup page (original version)"""
+    st.markdown("## Welcome to Credit CPR")
+    st.write("Sign in to access your AI-powered credit repair assistant")
+
+    tab1, tab2 = st.tabs(["Sign In", "Create Account"])
+
+    with tab1:
+        with st.form("login_form"):
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Password", type="password", key="login_password")
+            submit = st.form_submit_button("Sign In", use_container_width=True)
+
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔑 Forgot Password?", use_container_width=True):
+                st.session_state.show_forgot_password = True
+                st.rerun()
+
+        if submit:
+            if not email or not password:
+                st.error("Please enter both email and password")
+            else:
+                success, user_data = authenticate_user(email, password)
+                if success:
+                    st.session_state.authenticated = True
+                    st.session_state.user = user_data
+                    st.success("✅ Logged in successfully!")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid email or password")
+
+    with tab2:
+        with st.form("signup_form"):
+            new_email = st.text_input("Email", key="signup_email")
+            new_password = st.text_input("Password", type="password", key="signup_password")
+            confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
+            st.caption("Password must be at least 8 characters")
+            agree = st.checkbox("I agree that Credit CPR is an educational assistant, not a credit repair service")
+            submit = st.form_submit_button("Create Account", use_container_width=True)
+
+        if submit:
+            if not agree:
+                st.error("Please agree to the terms")
+            elif len(new_password) < 8:
+                st.error("Password must be at least 8 characters")
+            elif new_password != confirm_password:
+                st.error("Passwords don't match")
+            elif not new_email or '@' not in new_email:
+                st.error("Please enter a valid email")
+            else:
+                success, message = create_user(new_email, new_password)
+                if success:
+                    st.success("✅ Account created! Please sign in.")
+                else:
+                    st.error(f"❌ {message}")
+
+
+def show_user_dashboard():
+    """Display user dashboard in sidebar"""
+    user = st.session_state.user
+    # Always fetch fresh stats from DB
+    stats = get_user_stats(user['id'])
+
+    # Keep session state in sync
+    st.session_state.user['plan'] = stats['plan']
+
+    with st.sidebar:
+        st.markdown(f"### 👤 {user['email']}")
+
+        if stats['plan'] in ('pro', 'premium'):
+            st.success("⭐ Pro Plan")
+        elif stats['plan'] == 'basic':
+            st.info("🔵 Basic Plan")
+        else:
+            st.info("📦 Free Tier")
+
+        st.markdown("---")
+        st.markdown("**📊 Your Usage**")
+
+        if stats['plan'] == 'free':
+            st.write(f"Reports Analyzed: {stats['reports_analyzed']}/1")
+            if stats['reports_analyzed'] >= 1:
+                st.warning("⚠️ Free tier limit reached")
+            import stripe_integration
+            if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
+                st.session_state.show_upgrade = True
+                st.rerun()
+        else:
+            st.write(f"Reports Analyzed: {stats['reports_analyzed']}")
+            import stripe_integration
+            if st.button("🔧 Manage Subscription", use_container_width=True):
+                st.session_state.show_manage = True
+                st.rerun()
+
+        st.write(f"Disputes Purchased: {stats['disputes_purchased']}")
+        st.markdown("---")
+
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.user = None
+            st.session_state.show_landing = True
+            st.rerun()
+
+
+def require_auth(func):
+    """Decorator to require authentication"""
+    def wrapper(*args, **kwargs):
+        if not st.session_state.get('authenticated', False):
+            show_login_page()
+            return
+        return func(*args, **kwargs)
+    return wrapper
+
+
+# Initialize database on import
+try:
+    init_database()
+except Exception as e:
+    st.error(f"Database connection error: {str(e)}")
