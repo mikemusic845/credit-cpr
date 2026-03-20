@@ -1,43 +1,18 @@
 """
 Credit Score Tracker for Credit CPR
-Lets users log and track their credit scores over time
+Uses PostgreSQL (Supabase) for persistent storage
 """
 
 import streamlit as st
-import sqlite3
-import os
 from datetime import datetime
-import json
-
-
-DB_PATH = "users.db"
-
-
-def init_score_table():
-    """Add score tracking table if it doesn't exist"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS score_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            score INTEGER NOT NULL,
-            bureau TEXT NOT NULL,
-            note TEXT,
-            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    conn.commit()
-    conn.close()
+import auth  # Uses auth.get_conn()
 
 
 def log_score(user_id, score, bureau, note=""):
-    """Log a credit score entry"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = auth.get_conn()
     c = conn.cursor()
     c.execute(
-        'INSERT INTO score_history (user_id, score, bureau, note) VALUES (?, ?, ?, ?)',
+        'INSERT INTO score_history (user_id, score, bureau, note) VALUES (%s, %s, %s, %s)',
         (user_id, score, bureau, note)
     )
     conn.commit()
@@ -45,17 +20,16 @@ def log_score(user_id, score, bureau, note=""):
 
 
 def get_score_history(user_id, bureau=None):
-    """Get score history for a user"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = auth.get_conn()
     c = conn.cursor()
     if bureau and bureau != "All":
         c.execute(
-            'SELECT score, bureau, note, logged_at FROM score_history WHERE user_id = ? AND bureau = ? ORDER BY logged_at ASC',
+            'SELECT score, bureau, note, logged_at FROM score_history WHERE user_id = %s AND bureau = %s ORDER BY logged_at ASC',
             (user_id, bureau)
         )
     else:
         c.execute(
-            'SELECT score, bureau, note, logged_at FROM score_history WHERE user_id = ? ORDER BY logged_at ASC',
+            'SELECT score, bureau, note, logged_at FROM score_history WHERE user_id = %s ORDER BY logged_at ASC',
             (user_id,)
         )
     rows = c.fetchall()
@@ -64,7 +38,6 @@ def get_score_history(user_id, bureau=None):
 
 
 def get_score_color(score):
-    """Return color based on score range"""
     if score >= 800:
         return "#2E8B57", "Exceptional"
     elif score >= 740:
@@ -78,18 +51,13 @@ def get_score_color(score):
 
 
 def show_score_tracker():
-    """Main score tracker UI"""
-    init_score_table()
-
     user_id = st.session_state.user['id']
 
     st.header("📊 Credit Score Tracker")
     st.caption("Log your scores from all three bureaus and track your progress over time.")
 
-    # Log new score section
     with st.expander("➕ Log New Score", expanded=True):
         col1, col2, col3 = st.columns(3)
-
         with col1:
             bureau = st.selectbox("Bureau", ["Equifax", "Experian", "TransUnion"], key="score_bureau")
         with col2:
@@ -97,7 +65,6 @@ def show_score_tracker():
         with col3:
             note = st.text_input("Note (optional)", placeholder="e.g. After dispute resolved", key="score_note")
 
-        # Score preview
         color, label = get_score_color(score)
         st.markdown(f"""
         <div style='background: {color}20; border-left: 4px solid {color};
@@ -112,14 +79,12 @@ def show_score_tracker():
             st.success(f"✅ {bureau} score of {score} saved!")
             st.rerun()
 
-    # Score history
     history = get_score_history(user_id)
 
     if not history:
         st.info("👆 Log your first score above to start tracking your progress!")
         return
 
-    # Latest scores per bureau
     st.subheader("📈 Current Scores")
     bureaus = ["Equifax", "Experian", "TransUnion"]
     latest = {}
@@ -134,15 +99,15 @@ def show_score_tracker():
             if bureau_name in latest:
                 s = latest[bureau_name][0]
                 color, label = get_score_color(s)
+                logged_at = latest[bureau_name][3]
+                date_str = logged_at.strftime("%Y-%m-%d") if hasattr(logged_at, 'strftime') else str(logged_at)[:10]
                 st.markdown(f"""
                 <div style='background: {color}15; border: 2px solid {color};
                             border-radius: 12px; padding: 1.5rem; text-align: center;'>
                     <div style='font-size: 0.85rem; color: #666; margin-bottom: 0.25rem;'>{bureau_name}</div>
                     <div style='font-size: 2.5rem; font-weight: bold; color: {color};'>{s}</div>
                     <div style='font-size: 0.85rem; color: {color};'>{label}</div>
-                    <div style='font-size: 0.75rem; color: #999; margin-top: 0.5rem;'>
-                        {latest[bureau_name][3][:10]}
-                    </div>
+                    <div style='font-size: 0.75rem; color: #999; margin-top: 0.5rem;'>{date_str}</div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -155,20 +120,15 @@ def show_score_tracker():
                 </div>
                 """, unsafe_allow_html=True)
 
-    # Progress chart using simple HTML bars
     st.subheader("📉 Score History")
-
     filter_bureau = st.selectbox("Filter by bureau", ["All", "Equifax", "Experian", "TransUnion"], key="filter_bureau")
     filtered = get_score_history(user_id, filter_bureau)
 
     if len(filtered) >= 2:
-        # Show simple progress indicators
         first_score = filtered[0][0]
         last_score = filtered[-1][0]
         change = last_score - first_score
-        change_color = "#2E8B57" if change >= 0 else "#F44336"
         change_symbol = "+" if change >= 0 else ""
-
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Starting Score", first_score)
@@ -177,31 +137,29 @@ def show_score_tracker():
         with col3:
             st.metric("Entries Logged", len(filtered))
 
-    # Score history table
     with st.expander("📋 Full History"):
         for row in reversed(filtered):
             score_val, bureau_name, note_text, logged_at = row
             color, label = get_score_color(score_val)
-            note_display = f" — *{note_text}*" if note_text else ""
+            date_str = logged_at.strftime("%Y-%m-%d") if hasattr(logged_at, 'strftime') else str(logged_at)[:10]
             st.markdown(f"""
             <div style='display: flex; align-items: center; padding: 0.5rem;
                         border-bottom: 1px solid #eee; gap: 1rem;'>
                 <span style='color: {color}; font-weight: bold; font-size: 1.1rem; min-width: 50px;'>{score_val}</span>
                 <span style='background: {color}20; color: {color}; padding: 2px 8px;
                              border-radius: 4px; font-size: 0.8rem;'>{bureau_name}</span>
-                <span style='color: #666; font-size: 0.85rem;'>{logged_at[:10]}</span>
-                <span style='color: #888; font-size: 0.85rem; font-style: italic;'>{note_text}</span>
+                <span style='color: #666; font-size: 0.85rem;'>{date_str}</span>
+                <span style='color: #888; font-size: 0.85rem; font-style: italic;'>{note_text or ""}</span>
             </div>
             """, unsafe_allow_html=True)
 
-    # Credit score ranges reference
     with st.expander("📚 Credit Score Ranges Reference"):
         ranges = [
-            ("800–850", "Exceptional", "#2E8B57", "Best rates, easiest approvals"),
-            ("740–799", "Very Good", "#7CB342", "Above average, great rates"),
-            ("670–739", "Good", "#FFC107", "Near or above average"),
-            ("580–669", "Fair", "#FF9800", "Below average, higher rates"),
-            ("300–579", "Poor", "#F44336", "Difficulty getting approved"),
+            ("800-850", "Exceptional", "#2E8B57", "Best rates, easiest approvals"),
+            ("740-799", "Very Good", "#7CB342", "Above average, great rates"),
+            ("670-739", "Good", "#FFC107", "Near or above average"),
+            ("580-669", "Fair", "#FF9800", "Below average, higher rates"),
+            ("300-579", "Poor", "#F44336", "Difficulty getting approved"),
         ]
         for r, label, color, desc in ranges:
             st.markdown(f"""
