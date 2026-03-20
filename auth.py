@@ -18,7 +18,13 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 def get_conn():
     """Get a database connection"""
-    return psycopg2.connect(DATABASE_URL, sslmode="require", connect_timeout=10)
+    if not DATABASE_URL:
+        raise Exception("DATABASE_URL environment variable is not set. Please add it in Render Environment settings.")
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require", connect_timeout=10)
+        return conn
+    except Exception as e:
+        raise Exception(f"Database connection failed: {str(e)}")
 
 
 def init_database():
@@ -266,6 +272,7 @@ def get_all_users():
 
 def show_login_page():
     """Display login/signup page with Google Auth"""
+    ensure_db()
     try:
         from google_auth import show_login_page_with_google
         show_login_page_with_google()
@@ -387,5 +394,14 @@ def require_auth(func):
         return func(*args, **kwargs)
     return wrapper
 
+
+def ensure_db():
+    """Ensure database is initialized - call this before first DB use"""
+    try:
+        init_database()
+    except Exception as e:
+        st.error(f"⚠️ Database setup error: {str(e)}")
+        st.info("Please check your DATABASE_URL in Render Environment settings.")
+        st.stop()
 
 # Database is initialized lazily on first use, not on import
