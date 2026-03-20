@@ -1,10 +1,9 @@
 """
 Dispute Email Sender & Reminder System for Credit CPR
-Sends dispute letters via email and tracks follow-up reminders
+Uses PostgreSQL (Supabase) for persistent storage
 """
 
 import streamlit as st
-import sqlite3
 import os
 import smtplib
 import ssl
@@ -13,12 +12,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime, timedelta
-from io import BytesIO
+import auth  # Uses auth.get_conn()
 
-
-DB_PATH = "users.db"
-
-# Credit bureau email addresses (official dispute addresses)
 BUREAU_EMAILS = {
     "Equifax": "disputeinfo@equifax.com",
     "Experian": "disputes@experian.com",
@@ -32,51 +27,27 @@ BUREAU_ADDRESSES = {
 }
 
 
-def init_reminders_table():
-    """Create reminders table if it doesn't exist"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS dispute_reminders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            bureau TEXT NOT NULL,
-            dispute_description TEXT,
-            sent_date TEXT NOT NULL,
-            follow_up_date TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-
 def save_reminder(user_id, bureau, description, sent_date, follow_up_date):
-    """Save a dispute reminder"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = auth.get_conn()
     c = conn.cursor()
     c.execute(
         '''INSERT INTO dispute_reminders
            (user_id, bureau, dispute_description, sent_date, follow_up_date)
-           VALUES (?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s) RETURNING id''',
         (user_id, bureau, description, sent_date, follow_up_date)
     )
-    reminder_id = c.lastrowid
+    reminder_id = c.fetchone()[0]
     conn.commit()
     conn.close()
     return reminder_id
 
 
 def get_reminders(user_id):
-    """Get all reminders for a user"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = auth.get_conn()
     c = conn.cursor()
     c.execute(
         '''SELECT id, bureau, dispute_description, sent_date, follow_up_date, status, notes
-           FROM dispute_reminders WHERE user_id = ? ORDER BY follow_up_date ASC''',
+           FROM dispute_reminders WHERE user_id = %s ORDER BY follow_up_date ASC''',
         (user_id,)
     )
     rows = c.fetchall()
@@ -85,48 +56,36 @@ def get_reminders(user_id):
 
 
 def update_reminder_status(reminder_id, status, notes=""):
-    """Update a reminder's status"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = auth.get_conn()
     c = conn.cursor()
     c.execute(
-        'UPDATE dispute_reminders SET status = ?, notes = ? WHERE id = ?',
+        'UPDATE dispute_reminders SET status = %s, notes = %s WHERE id = %s',
         (status, notes, reminder_id)
     )
     conn.commit()
     conn.close()
 
 
-def send_dispute_email(sender_email, sender_password, recipient_email, subject, body, attachment_buffer=None, attachment_name="dispute_letter.docx"):
-    """Send dispute letter via email using Gmail SMTP"""
+def send_dispute_email(sender_email, sender_password, recipient_email, subject, body):
     try:
         msg = MIMEMultipart()
         msg['From'] = sender_email
         msg['To'] = recipient_email
         msg['Subject'] = subject
-
         msg.attach(MIMEText(body, 'plain'))
-
-        if attachment_buffer:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(attachment_buffer.read())
-            encoders.encode_base64(part)
-            part.add_header('Content-Disposition', f'attachment; filename="{attachment_name}"')
-            msg.attach(part)
 
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, recipient_email, msg.as_string())
-
         return True, "Email sent successfully!"
     except smtplib.SMTPAuthenticationError:
-        return False, "Authentication failed. Make sure you're using a Gmail App Password, not your regular password."
+        return False, "Authentication failed. Use a Gmail App Password, not your regular password."
     except Exception as e:
         return False, str(e)
 
 
 def show_email_sender():
-    """UI for sending dispute letters via email"""
     st.header("📬 Email Dispute Letters")
     st.caption("Send your dispute letters directly to credit bureaus via email.")
 
@@ -134,32 +93,25 @@ def show_email_sender():
         st.info("👈 Please upload and analyze a credit report first to generate dispute letters.")
         return
 
-    # Gmail setup instructions
     with st.expander("⚙️ Email Setup Instructions", expanded=False):
         st.markdown("""
-        **To send emails, you need a Gmail account with an App Password:**
-
+        **To send emails, you need a Gmail App Password:**
         1. Go to your Google Account → Security
-        2. Enable **2-Step Verification** (if not already on)
-        3. Go to **App Passwords** (under 2-Step Verification)
-        4. Create a new App Password for "Mail"
-        5. Copy the 16-character password and paste it below
+        2. Enable **2-Step Verification**
+        3. Go to **App Passwords** → Create one for "Mail"
+        4. Copy the 16-character password and paste below
 
-        ⚠️ Never use your regular Gmail password here — always use an App Password.
+        ⚠️ Never use your regular Gmail password — always use an App Password.
         Your credentials are never stored.
         """)
 
-    st.subheader("📧 Your Email Credentials")
     col1, col2 = st.columns(2)
     with col1:
         sender_email = st.text_input("Your Gmail Address", placeholder="you@gmail.com", key="sender_email")
     with col2:
         sender_password = st.text_input("Gmail App Password", type="password", placeholder="16-character app password", key="sender_password")
 
-    st.subheader("📝 Dispute Letter to Send")
-
-    bureau = st.selectbox("Select Bureau to Dispute With", ["Equifax", "Experian", "TransUnion"], key="email_bureau")
-
+    bureau = st.selectbox("Select Bureau", ["Equifax", "Experian", "TransUnion"], key="email_bureau")
     error_options = [
         f"{e.get('category', 'Error')} - {e.get('description', 'Unknown')[:60]}"
         for e in st.session_state.errors_found
@@ -168,10 +120,8 @@ def show_email_sender():
                                  format_func=lambda x: error_options[x], key="email_error_idx")
     selected_error = st.session_state.errors_found[selected_idx]
 
-    # Show bureau address
     st.info(f"📮 **{bureau} Mailing Address:**\n\n{BUREAU_ADDRESSES[bureau]}")
 
-    # Generate and preview letter
     if st.button("✍️ Generate Letter for Email", type="primary", use_container_width=True):
         if not st.session_state.user_info.get('name'):
             st.warning("Please fill in your personal information in the sidebar first.")
@@ -193,11 +143,9 @@ def show_email_sender():
     if st.session_state.get('email_letter_text'):
         letter_text = st.session_state.email_letter_text
         bureau_used = st.session_state.get('email_bureau', bureau)
-
         st.text_area("📄 Letter Preview (editable)", letter_text, height=300, key="email_letter_preview")
 
         subject = f"Credit Report Dispute - {st.session_state.user_info.get('name', 'Consumer')}"
-
         col1, col2 = st.columns(2)
         with col1:
             send_to_bureau = st.checkbox(f"Send to {bureau_used} ({BUREAU_EMAILS[bureau_used]})", value=True)
@@ -209,28 +157,19 @@ def show_email_sender():
                 st.error("Please enter your Gmail credentials above.")
             else:
                 final_letter = st.session_state.get('email_letter_preview', letter_text)
+                success_count = 0
 
                 with st.spinner("📤 Sending..."):
-                    success_count = 0
-
                     if send_to_bureau:
-                        ok, msg = send_dispute_email(
-                            sender_email, sender_password,
-                            BUREAU_EMAILS[bureau_used],
-                            subject, final_letter
-                        )
+                        ok, msg = send_dispute_email(sender_email, sender_password, BUREAU_EMAILS[bureau_used], subject, final_letter)
                         if ok:
                             success_count += 1
                             st.success(f"✅ Sent to {bureau_used}!")
                         else:
-                            st.error(f"❌ Failed to send to {bureau_used}: {msg}")
+                            st.error(f"❌ Failed: {msg}")
 
                     if send_copy_to_self:
-                        ok, msg = send_dispute_email(
-                            sender_email, sender_password,
-                            sender_email,
-                            f"[COPY] {subject}", final_letter
-                        )
+                        ok, msg = send_dispute_email(sender_email, sender_password, sender_email, f"[COPY] {subject}", final_letter)
                         if ok:
                             success_count += 1
                             st.success("✅ Copy sent to you!")
@@ -238,28 +177,19 @@ def show_email_sender():
                             st.error(f"❌ Failed to send copy: {msg}")
 
                 if success_count > 0:
-                    # Auto-create reminder
                     sent_date = datetime.now().strftime("%Y-%m-%d")
                     follow_up_date = (datetime.now() + timedelta(days=35)).strftime("%Y-%m-%d")
-                    save_reminder(
-                        st.session_state.user['id'],
-                        bureau_used,
-                        st.session_state.get('email_error_desc', 'Dispute'),
-                        sent_date,
-                        follow_up_date
-                    )
-                    st.info(f"🔔 Follow-up reminder automatically set for {follow_up_date} (35 days from today)")
+                    save_reminder(st.session_state.user['id'], bureau_used,
+                                  st.session_state.get('email_error_desc', 'Dispute'), sent_date, follow_up_date)
+                    st.info(f"🔔 Follow-up reminder set for {follow_up_date} (35 days from today)")
 
 
 def show_reminders():
-    """UI for managing dispute follow-up reminders"""
-    init_reminders_table()
     user_id = st.session_state.user['id']
 
     st.header("🔔 Dispute Follow-Up Reminders")
-    st.caption("Track your dispute deadlines. Bureaus have 30 days to investigate — follow up if you don't hear back.")
+    st.caption("Bureaus have 30 days to investigate — follow up if you don't hear back.")
 
-    # Add manual reminder
     with st.expander("➕ Add Manual Reminder"):
         col1, col2 = st.columns(2)
         with col1:
@@ -278,7 +208,6 @@ def show_reminders():
             else:
                 st.warning("Please enter a dispute description.")
 
-    # Show reminders
     reminders = get_reminders(user_id)
 
     if not reminders:
@@ -286,22 +215,18 @@ def show_reminders():
         return
 
     today = datetime.now().date()
-
-    # Overdue
-    overdue = [r for r in reminders if r[5] == 'pending' and datetime.strptime(r[4], "%Y-%m-%d").date() < today]
-    upcoming = [r for r in reminders if r[5] == 'pending' and datetime.strptime(r[4], "%Y-%m-%d").date() >= today]
+    overdue = [r for r in reminders if r[5] == 'pending' and datetime.strptime(str(r[4])[:10], "%Y-%m-%d").date() < today]
+    upcoming = [r for r in reminders if r[5] == 'pending' and datetime.strptime(str(r[4])[:10], "%Y-%m-%d").date() >= today]
     completed = [r for r in reminders if r[5] != 'pending']
 
     if overdue:
         st.error(f"⚠️ {len(overdue)} Overdue Follow-Up(s)")
         for r in overdue:
             show_reminder_card(r, "overdue")
-
     if upcoming:
         st.subheader(f"📅 Upcoming ({len(upcoming)})")
         for r in upcoming:
             show_reminder_card(r, "upcoming")
-
     if completed:
         with st.expander(f"✅ Completed ({len(completed)})"):
             for r in completed:
@@ -309,53 +234,42 @@ def show_reminders():
 
 
 def show_reminder_card(reminder, reminder_type):
-    """Show a single reminder card"""
     r_id, bureau, description, sent_date, follow_up_date, status, notes = reminder
-
     today = datetime.now().date()
-    follow_up = datetime.strptime(follow_up_date, "%Y-%m-%d").date()
+    follow_up = datetime.strptime(str(follow_up_date)[:10], "%Y-%m-%d").date()
     days_until = (follow_up - today).days
 
     if reminder_type == "overdue":
-        border_color = "#F44336"
-        icon = "🔴"
+        border_color, icon = "#F44336", "🔴"
         days_text = f"{abs(days_until)} days overdue"
     elif reminder_type == "upcoming":
-        if days_until <= 7:
-            border_color = "#FF9800"
-            icon = "🟡"
-        else:
-            border_color = "#2E8B57"
-            icon = "🟢"
+        border_color = "#FF9800" if days_until <= 7 else "#2E8B57"
+        icon = "🟡" if days_until <= 7 else "🟢"
         days_text = f"in {days_until} days" if days_until > 0 else "today"
     else:
-        border_color = "#9E9E9E"
-        icon = "✅"
+        border_color, icon = "#9E9E9E", "✅"
         days_text = status
 
-    with st.container():
-        st.markdown(f"""
-        <div style='border-left: 4px solid {border_color}; padding: 0.75rem 1rem;
-                    background: {border_color}10; border-radius: 0 8px 8px 0; margin: 0.5rem 0;'>
-            <div style='display: flex; justify-content: space-between; align-items: center;'>
-                <div>
-                    <strong>{icon} {bureau}</strong> — {description}
-                </div>
-                <div style='font-size: 0.8rem; color: #666;'>{days_text}</div>
-            </div>
-            <div style='font-size: 0.8rem; color: #888; margin-top: 0.25rem;'>
-                Sent: {sent_date} | Follow-up: {follow_up_date}
-            </div>
+    st.markdown(f"""
+    <div style='border-left: 4px solid {border_color}; padding: 0.75rem 1rem;
+                background: {border_color}10; border-radius: 0 8px 8px 0; margin: 0.5rem 0;'>
+        <div style='display: flex; justify-content: space-between;'>
+            <strong>{icon} {bureau}</strong> — {description}
+            <span style='font-size: 0.8rem; color: #666;'>{days_text}</span>
         </div>
-        """, unsafe_allow_html=True)
+        <div style='font-size: 0.8rem; color: #888; margin-top: 0.25rem;'>
+            Sent: {str(sent_date)[:10]} | Follow-up: {str(follow_up_date)[:10]}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        if reminder_type != "completed":
-            col1, col2, col3 = st.columns([2, 1, 1])
-            with col2:
-                if st.button("✅ Resolved", key=f"resolve_{r_id}", use_container_width=True):
-                    update_reminder_status(r_id, "resolved")
-                    st.rerun()
-            with col3:
-                if st.button("❌ No Response", key=f"no_response_{r_id}", use_container_width=True):
-                    update_reminder_status(r_id, "no_response")
-                    st.rerun()
+    if reminder_type != "completed":
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col2:
+            if st.button("✅ Resolved", key=f"resolve_{r_id}", use_container_width=True):
+                update_reminder_status(r_id, "resolved")
+                st.rerun()
+        with col3:
+            if st.button("❌ No Response", key=f"no_response_{r_id}", use_container_width=True):
+                update_reminder_status(r_id, "no_response")
+                st.rerun()
