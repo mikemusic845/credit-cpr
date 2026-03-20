@@ -18,7 +18,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 def get_conn():
     """Get a database connection"""
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+    return psycopg2.connect(DATABASE_URL, sslmode="require", connect_timeout=10)
 
 
 def init_database():
@@ -388,8 +388,4 @@ def require_auth(func):
     return wrapper
 
 
-# Initialize database on import
-try:
-    init_database()
-except Exception as e:
-    st.error(f"Database connection error: {str(e)}")
+# Database is initialized lazily on first use, not on import
