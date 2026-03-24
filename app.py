@@ -13,7 +13,6 @@ from datetime import datetime
 import PyPDF2
 import base64
 import auth  # Authentication system
-import auth
 
 def get_shield_base64():
     with open("assets/shield.png", "rb") as f:
@@ -442,21 +441,8 @@ def main():
     
     # Show login if not authenticated
     if not st.session_state.authenticated:
-        # Check for password reset flow
-        import password_reset
-        if password_reset.handle_password_reset_flow():
-            return  # Show reset form
-    
-    # Check if showing forgot password form
-    if st.session_state.get('show_forgot_password', False):
-        password_reset.show_forgot_password_form()
+        auth.show_login_page()
         return
-    
-    auth.show_login_page()
-    return
-
-# Show user dashboard in sidebar
-auth.show_user_dashboard()
     
     # Show user dashboard in sidebar
     auth.show_user_dashboard()
