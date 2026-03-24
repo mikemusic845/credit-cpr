@@ -74,12 +74,13 @@ def handle_google_callback():
 
                 if email:
                     import auth
-                    import sqlite3
-
-                    conn = sqlite3.connect("users.db")
-                    c = conn.cursor()
-
-                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
+                    
+                    try:
+                        # Use PostgreSQL connection from auth module
+                        conn = auth.get_conn()
+                        c = conn.cursor()
+                        # Check if user exists in PostgreSQL
+                        c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = %s', (email,))))
                     user = c.fetchone()
 
                     if user:
@@ -96,8 +97,8 @@ def handle_google_callback():
                     else:
                         import secrets
                         random_password = secrets.token_urlsafe(32)
-                        password_hash = auth.hash_password(random_password)
-                        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
+                        c.execute('INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id', (email, password_hash))
+                        user_id = c.fetchone()[0]
                         user_id = c.lastrowid
                         conn.commit()
                         user_data = {
@@ -110,7 +111,10 @@ def handle_google_callback():
                         st.session_state.authenticated = True
                         st.session_state.user = user_data
                         st.success(f"✅ Account created with Google! Welcome {name}!")
-
+                        conn.close()
+                    
+                    except Exception as db_error:
+                        st.error(f"Database error: {str(db_error)}")
                     conn.close()
 
                     try:
