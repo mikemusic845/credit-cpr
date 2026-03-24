@@ -393,3 +393,31 @@ try:
     init_database()
 except Exception as e:
     st.error(f"Database connection error: {str(e)}")
+    def main():
+    st.set_page_config(
+        page_title="Credit CPR - AI Credit Repair Assistant",
+        page_icon="💳",
+        layout="wide"
+    )
+
+    # Initialize session state
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if "user" not in st.session_state:
+        st.session_state.user = None
+    if "show_landing" not in st.session_state:
+        st.session_state.show_landing = True
+    if "show_upgrade" not in st.session_state:
+        st.session_state.show_upgrade = False
+    if "show_manage" not in st.session_state:
+        st.session_state.show_manage = False
+    if "show_forgot_password" not in st.session_state:
+        st.session_state.show_forgot_password = False
+
+    if not st.session_state.get("authenticated", False):
+        show_login_page()
+    else:
+        show_user_dashboard()
+
+
+main()
