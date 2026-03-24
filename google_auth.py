@@ -76,7 +76,7 @@ def handle_google_callback():
                     import auth
                     import sqlite3
 
-                    conn = sqlite3.connect("users.db"
+                    conn = sqlite3.connect("users.db")
                     c = conn.cursor()
 
                     c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
