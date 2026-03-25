@@ -5,10 +5,9 @@ Google OAuth for Streamlit - Working Implementation
 import streamlit as st
 import requests
 import os
-import psycopg2
+import sqlite3
 from urllib.parse import urlencode
 
-# Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
@@ -27,7 +26,7 @@ def get_google_auth_url():
         'access_type': 'offline',
         'prompt': 'consent'
     }
-    return f"{GOOGLE_AUTH_URL}%S{urlencode(params)}"
+    return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 def exchange_code_for_token(code):
     data = {
@@ -60,7 +59,6 @@ def handle_google_callback():
     if code:
         try:
             token_data = exchange_code_for_token(code)
-
             if 'access_token' in token_data:
                 user_info = get_user_info(token_data['access_token'])
                 email = user_info.get('email')
@@ -68,10 +66,10 @@ def handle_google_callback():
 
                 if email:
                     import auth
-                    conn = sqlite3.connect("users.db")
+                    conn = sqlite3.connect(auth.DB_PATH)
                     c = conn.cursor()
 
-                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = %S', (email,))
+                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
                     user = c.fetchone()
 
                     if user:
@@ -89,8 +87,8 @@ def handle_google_callback():
                         import secrets
                         random_password = secrets.token_urlsafe(32)
                         password_hash = auth.hash_password(random_password)
-                        c.execute('INSERT INTO users (email, password_hash) VALUES (%S, %S)', (email, password_hash))
-                        user_id = c.c.fetchone()[0]
+                        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
+                        user_id = c.lastrowid
                         conn.commit()
                         user_data = {
                             'id': user_id,
@@ -126,27 +124,14 @@ def handle_google_callback():
 def show_google_login_button():
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         return
-
     google_auth_url = get_google_auth_url()
-
     st.markdown(f"""
     <div style='text-align: center; margin: 20px 0;'>
         <a href='{google_auth_url}' target='_self' style='text-decoration: none;'>
-            <div style='
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: 12px 24px;
-                background: white;
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: 500;
-                color: #333;
-                transition: all 0.2s;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            '>
+            <div style='display: inline-flex; align-items: center; justify-content: center;
+                padding: 12px 24px; background: white; border: 2px solid #ddd;
+                border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 500;
+                color: #333; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
                 <svg width="20" height="20" viewBox="0 0 20 20" style="margin-right: 12px;">
                     <path fill="#4285F4" d="M19.6 10.23c0-.82-.1-1.42-.25-2.05H10v3.72h5.5c-.15.96-.74 2.31-2.04 3.22v2.45h3.16c1.89-1.73 2.98-4.3 2.98-7.34z"/>
                     <path fill="#34A853" d="M13.46 15.13c-.83.59-1.96 1-3.46 1-2.64 0-4.88-1.74-5.68-4.15H1.07v2.52C2.72 17.75 6.09 20 10 20c2.7 0 4.96-.89 6.62-2.42l-3.16-2.45z"/>
@@ -165,26 +150,21 @@ def show_google_login_button():
 
 def show_login_page_with_google():
     handle_google_callback()
-
     st.markdown("## Welcome to Credit CPR")
     st.write("Sign in to access your AI-powered credit repair assistant")
-
     show_google_login_button()
 
     tab1, tab2 = st.tabs(["Sign In", "Create Account"])
-
     with tab1:
         with st.form("login_form"):
             email = st.text_input("Email", key="login_email")
             password = st.text_input("Password", type="password", key="login_password")
             submit = st.form_submit_button("Sign In", use_container_width=True)
-
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("🔑 Forgot Password%S", use_container_width=True):
+            if st.button("🔑 Forgot Password?", use_container_width=True):
                 st.session_state.show_forgot_password = True
                 st.rerun()
-
         if submit:
             if not email or not password:
                 st.error("Please enter both email and password")
@@ -207,7 +187,6 @@ def show_login_page_with_google():
             st.caption("Password must be at least 8 characters")
             agree = st.checkbox("I agree that Credit CPR is an educational assistant, not a credit repair service")
             submit = st.form_submit_button("Create Account", use_container_width=True)
-
         if submit:
             if not agree:
                 st.error("Please agree to the terms")
