@@ -1,13 +1,10 @@
 """
-Merged AI Chat Assistant for Credit CPR
-Best-of-both version:
-- safer API key loading
-- better model selection
-- credit-context awareness
-- session memory
-- plan awareness and free-plan badge
-- smart action hints
-- cleaner quick prompts
+AI Chat Assistant for Credit CPR
+- Paid plans only (basic, pro, premium)
+- Free users see upgrade gate
+- Context-aware credit coaching
+- Session memory
+- Smart quick prompts
 """
 
 import os
@@ -16,7 +13,6 @@ import streamlit as st
 
 
 def _get_api_key() -> str:
-    """Get Anthropic API key from Streamlit secrets or environment."""
     try:
         key = st.secrets.get("ANTHROPIC_API_KEY", "")
     except Exception:
@@ -29,22 +25,12 @@ def _get_api_key() -> str:
 def _extract_memory_candidate(user_input: str):
     text = user_input.strip()
     lower = text.lower()
-
     triggers = [
-        "my score is",
-        "my credit score is",
-        "i was denied",
-        "i have a collection",
-        "i have collections",
-        "i filed bankruptcy",
-        "i missed a payment",
-        "i have late payments",
-        "i want to buy a house",
-        "i want to buy a car",
-        "my goal is",
-        "i need to get approved",
+        "my score is", "my credit score is", "i was denied",
+        "i have a collection", "i have collections", "i filed bankruptcy",
+        "i missed a payment", "i have late payments", "i want to buy a house",
+        "i want to buy a car", "my goal is", "i need to get approved",
     ]
-
     if any(t in lower for t in triggers):
         return text[:220]
     return None
@@ -68,41 +54,24 @@ def _summarize_credit_context(credit_data=None, errors=None) -> str:
     ]
 
     if accounts:
-        account_lines = []
+        lines = []
         for a in accounts:
-            creditor = a.get("creditor") or a.get("name") or "Unknown account"
-            status = a.get("status", "unknown status")
-            balance = a.get("balance", "unknown balance")
-            account_lines.append(f"- {creditor} | status: {status} | balance: {balance}")
-        sections.append("Top accounts:\n" + "\n".join(account_lines))
+            creditor = a.get("creditor") or a.get("name") or "Unknown"
+            status = a.get("status", "unknown")
+            balance = a.get("balance", "unknown")
+            lines.append(f"- {creditor} | status: {status} | balance: {balance}")
+        sections.append("Top accounts:\n" + "\n".join(lines))
 
     if negatives:
-        negative_lines = []
+        lines = []
         for n in negatives:
             desc = n.get("description") or n.get("type") or "Negative item"
             date = n.get("date", "unknown date")
-            negative_lines.append(f"- {desc} | date: {date}")
-        sections.append("Top negative items:\n" + "\n".join(negative_lines))
-
-    if inquiries:
-        inquiry_lines = []
-        for i in inquiries:
-            company = i.get("company", "Unknown company")
-            date = i.get("date", "unknown date")
-            inquiry_lines.append(f"- {company} | date: {date}")
-        sections.append("Recent inquiries:\n" + "\n".join(inquiry_lines))
-
-    if public_records:
-        public_lines = []
-        for p in public_records:
-            ptype = p.get("type", "Public record")
-            status = p.get("status", "unknown status")
-            date = p.get("date", "unknown date")
-            public_lines.append(f"- {ptype} | status: {status} | date: {date}")
-        sections.append("Public records:\n" + "\n".join(public_lines))
+            lines.append(f"- {desc} | date: {date}")
+        sections.append("Top negative items:\n" + "\n".join(lines))
 
     if errors:
-        error_lines = []
+        lines = []
         categories = []
         for e in errors[:6]:
             category = e.get("category", "Issue")
@@ -110,8 +79,8 @@ def _summarize_credit_context(credit_data=None, errors=None) -> str:
                 categories.append(category)
             desc = e.get("description", "No description")
             impact = e.get("potential_impact", "unknown")
-            error_lines.append(f"- {category}: {desc} | potential impact: {impact}")
-        sections.append("Detected issues:\n" + "\n".join(error_lines))
+            lines.append(f"- {category}: {desc} | potential impact: {impact}")
+        sections.append("Detected issues:\n" + "\n".join(lines))
         if categories:
             sections.append("Issue categories: " + ", ".join(categories))
 
@@ -144,10 +113,10 @@ Rules:
 - Keep answers practical and personalized when context is available"""
 
     plan_context = f"\n\nCurrent user plan: {user_plan}."
-    if user_plan == "free":
-        plan_context += " Give strong practical value, but mention upgrades naturally only when truly relevant."
+    if user_plan == "basic":
+        plan_context += " User has Basic paid access. Give solid coaching and actionable advice."
     else:
-        plan_context += " User has paid access. Give fuller coaching and more detailed next steps."
+        plan_context += " User has Pro/Premium access. Give full deep-dive coaching and detailed next steps."
 
     memory_context = ""
     if chat_memory:
@@ -200,14 +169,11 @@ def _build_quick_questions():
         "Can I remove a collection account?",
         "What rights do I have under FCRA?",
     ]
-
     errors = st.session_state.get("errors_found", [])
     if errors:
-        first_issue = errors[0]
-        issue_name = first_issue.get("category", "issue")
+        issue_name = errors[0].get("category", "issue")
         quick_questions.append(f"What should I dispute first based on my {issue_name.lower()}?")
         quick_questions.append("What should my next 30 days look like based on my report?")
-
     return quick_questions[:8]
 
 
@@ -215,18 +181,13 @@ def show_chat_assistant():
     _ensure_session_state()
 
     user_plan = (st.session_state.get("user") or {}).get("plan", "free")
+    is_paid = user_plan in ("basic", "pro", "premium")
 
     st.header("💬 AI Credit Specialist")
-    if user_plan == "free":
-        st.info("📦 Free Plan: Chat guidance is available here. Premium features can be surfaced when relevant.")
-    elif user_plan == "basic":
-        st.success("🔵 Basic Plan Active")
-    else:
-        st.success("⭐ Pro/Premium Plan Active")
-
     st.caption("Ask about credit repair, FCRA rights, dispute strategy, collections, and credit-building.")
 
-    st.markdown("**Quick Questions:**")
+    # Show quick questions for everyone — clicking triggers upgrade for free users
+    st.markdown("**Suggested Questions:**")
     quick_questions = _build_quick_questions()
     cols = st.columns(2 if len(quick_questions) <= 4 else 3)
 
@@ -234,9 +195,54 @@ def show_chat_assistant():
         col = cols[i % len(cols)]
         with col:
             if st.button(question, key=f"quick_{i}", use_container_width=True):
-                st.session_state.pending_message = question
+                if not is_paid:
+                    st.session_state.show_upgrade = True
+                    st.rerun()
+                else:
+                    st.session_state.pending_message = question
 
     st.divider()
+
+    # Free user gate
+    if not is_paid:
+        st.markdown("""
+        <div style="
+            padding: 32px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #f0f8f0 0%, #e8f5e9 100%);
+            border: 2px solid #2E8B57;
+            text-align: center;
+            box-shadow: 0 8px 24px rgba(46,139,87,0.15);
+            margin: 20px 0;
+        ">
+            <h3 style="margin-bottom: 10px; color: #1B3A5C;">🔒 AI Chat is a Paid Feature</h3>
+            <p style="margin-bottom: 16px; color: #444;">
+                Get personalized credit guidance, dispute strategy help,<br>
+                and report-aware coaching from your AI Credit Specialist.
+            </p>
+            <p style="color: #666; font-size: 0.9rem;">Available on Basic ($19/mo), Pro ($29/mo), and Premium plans</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("🚀 Upgrade to Unlock AI Chat", type="primary", use_container_width=True):
+            st.session_state.show_upgrade = True
+            st.rerun()
+
+        st.markdown("### 💡 What you can ask with a paid plan:")
+        st.markdown(
+            "- What should I dispute first?\n"
+            "- Which item is hurting me the most?\n"
+            "- What is the fastest safe way to build my score?\n"
+            "- What should I do in the next 30 days?\n"
+            "- Should I pay or dispute this collection?"
+        )
+        return
+
+    # Paid users only below this line
+    if user_plan == "basic":
+        st.success("🔵 Basic Plan Active")
+    else:
+        st.success("⭐ Pro/Premium Plan Active")
 
     for msg in st.session_state.chat_messages:
         avatar = "🛡️" if msg["role"] == "assistant" else "👤"
@@ -303,7 +309,7 @@ def process_message(user_input: str):
     if not api_key:
         _append_message(
             "assistant",
-            "⚠️ I’m not connected right now because the Anthropic API key is missing. Please add ANTHROPIC_API_KEY to Render environment variables.",
+            "⚠️ I'm not connected right now because the Anthropic API key is missing. Please add ANTHROPIC_API_KEY to Render environment variables.",
         )
         return
 
@@ -323,9 +329,9 @@ def process_message(user_input: str):
 
         lower = user_input.lower()
         if "dispute letter" in lower or "write a dispute" in lower:
-            assistant_reply += "\n\n📄 You can also jump to the **Dispute Letters** tab to generate one."
-        if "plan" in lower or "next 30 days" in lower or "what should i do next" in lower:
-            assistant_reply += "\n\n📈 You can also visit the **Credit Plan** tab for a structured action plan."
+            assistant_reply += "\n\n📄 Ready to generate one? Jump to the **Dispute Letters** tab!"
+        if "plan" in lower or "next 30 days" in lower or "what should i do" in lower:
+            assistant_reply += "\n\n📈 Check the **Credit Plan** tab for your full 90-day action plan!"
 
     except Exception as e:
         assistant_reply = (
