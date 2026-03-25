@@ -924,437 +924,337 @@ def main():
     with tab6:
         st.header("📅 Dispute Tracker & Tools")
 
-        user_plan = (st.session_state.get("user") or {}).get("plan", "free")
-        is_paid = user_plan in ("basic", "pro", "premium")
+        user_plan_t6 = (st.session_state.get("user") or {}).get("plan", "free")
+        is_paid_t6 = user_plan_t6 in ("basic", "pro", "premium")
 
-        if not is_paid:
-            st.info("🔒 Upgrade to track disputes, get follow-up alerts, and email letters directly to bureaus.")
-            if st.button("🚀 Upgrade Now", use_container_width=True, key="upgrade_disputes"):
+        if not is_paid_t6:
+            st.markdown("""
+            <div style='padding:32px;border-radius:14px;background:linear-gradient(135deg,#f0f8f0 0%,#e8f5e9 100%);
+                        border:2px solid #2E8B57;text-align:center;box-shadow:0 8px 24px rgba(46,139,87,0.15);margin:20px 0;'>
+                <h3 style='color:#1B3A5C;'>🔒 Dispute Tracker is a Paid Feature</h3>
+                <p style='color:#444;margin-bottom:8px;'>Track disputes, get automatic follow-up alerts, and email letters directly to credit bureaus.</p>
+                <p style='color:#666;font-size:0.9rem;'>Available on Basic ($19/mo), Pro ($29/mo), and Premium plans</p>
+            </div>""", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("- 📋 Track all disputes in one place\n- 🔔 Automatic 30-day follow-up alerts\n- ⚠️ Overdue dispute notifications")
+            with col2:
+                st.markdown("- 📬 Email letters directly to bureaus\n- ✅ Mark disputes as resolved\n- 📊 Dispute stats dashboard")
+            if st.button("🚀 Upgrade to Unlock Dispute Tracker", type="primary", use_container_width=True, key="upgrade_disputes"):
                 st.session_state.show_upgrade = True
                 st.session_state.upgrade_source = "dispute_tracker"
                 st.rerun()
-            st.stop()
+        else:
+            import sqlite3
+            import smtplib
+            import ssl
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
 
-        import sqlite3
-        import smtplib
-        import ssl
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
+            conn = sqlite3.connect(auth.DB_PATH)
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS dispute_reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    bureau TEXT,
+                    dispute_description TEXT,
+                    sent_date TEXT,
+                    follow_up_date TEXT,
+                    status TEXT DEFAULT 'pending'
+                )
+            """)
+            conn.commit()
 
-        conn = sqlite3.connect(auth.DB_PATH)
-        c = conn.cursor()
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS dispute_reminders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                bureau TEXT,
-                dispute_description TEXT,
-                sent_date TEXT,
-                follow_up_date TEXT,
-                status TEXT DEFAULT 'pending'
-            )
-        """)
-        conn.commit()
+            dtab1, dtab2, dtab3 = st.tabs(["📋 My Disputes", "➕ Add Dispute", "📬 Email a Letter"])
 
-        dtab1, dtab2, dtab3 = st.tabs(["📋 My Disputes", "➕ Add Dispute", "📬 Email a Letter"])
+            with dtab1:
+                c.execute(
+                    "SELECT id, bureau, dispute_description, sent_date, follow_up_date, status FROM dispute_reminders WHERE user_id = ? ORDER BY follow_up_date ASC",
+                    (st.session_state.user["id"],)
+                )
+                rows = c.fetchall()
 
-        with dtab1:
-            # --- Auto-alerts ---
-            c.execute(
-                "SELECT id, bureau, dispute_description, sent_date, follow_up_date, status FROM dispute_reminders WHERE user_id = ? ORDER BY follow_up_date ASC",
-                (st.session_state.user["id"],)
-            )
-            rows = c.fetchall()
-
-            if not rows:
-                st.info("No disputes tracked yet. Use the **Add Dispute** tab to get started!")
-            else:
-                today = datetime.now().date()
-                overdue = [r for r in rows if r[5] == 'pending' and datetime.strptime(r[4], "%Y-%m-%d").date() < today]
-                due_soon = [r for r in rows if r[5] == 'pending' and 0 <= (datetime.strptime(r[4], "%Y-%m-%d").date() - today).days <= 7]
-                upcoming = [r for r in rows if r[5] == 'pending' and (datetime.strptime(r[4], "%Y-%m-%d").date() - today).days > 7]
-                resolved = [r for r in rows if r[5] == 'resolved']
-
-                # Alert banners
-                if overdue:
-                    st.error(f"⚠️ {len(overdue)} dispute(s) are OVERDUE for follow-up! Bureaus must respond within 30 days.")
-                if due_soon:
-                    st.warning(f"🔔 {len(due_soon)} dispute(s) need follow-up within the next 7 days.")
-
-                # Stats
-                s1, s2, s3, s4 = st.columns(4)
-                s1.metric("Total Disputes", len(rows))
-                s2.metric("⚠️ Overdue", len(overdue))
-                s3.metric("🔔 Due Soon", len(due_soon))
-                s4.metric("✅ Resolved", len(resolved))
-
-                st.divider()
-
-                def show_dispute_row(row, alert_type):
-                    rid, bureau, desc, sent, followup, status = row
-                    follow_date = datetime.strptime(followup, "%Y-%m-%d").date()
-                    days_diff = (follow_date - today).days
-
-                    if alert_type == "overdue":
-                        border = "#F44336"
-                        icon = "🔴"
-                        time_label = f"{abs(days_diff)} days overdue"
-                    elif alert_type == "due_soon":
-                        border = "#FF9800"
-                        icon = "🟡"
-                        time_label = f"Follow-up in {days_diff} days"
-                    elif alert_type == "upcoming":
-                        border = "#2E8B57"
-                        icon = "🟢"
-                        time_label = f"Follow-up in {days_diff} days"
-                    else:
-                        border = "#9E9E9E"
-                        icon = "✅"
-                        time_label = "Resolved"
-
-                    st.markdown(f"""
-                    <div style='border-left:4px solid {border};padding:0.75rem 1rem;
-                                background:{border}10;border-radius:0 8px 8px 0;margin:0.4rem 0;'>
-                        <div style='display:flex;justify-content:space-between;'>
-                            <strong>{icon} {bureau}</strong>
-                            <span style='font-size:0.8rem;color:#666;'>{time_label}</span>
-                        </div>
-                        <div style='color:#444;margin:0.25rem 0;'>{desc}</div>
-                        <div style='font-size:0.75rem;color:#999;'>Sent: {sent} | Follow-up: {followup}</div>
-                    </div>""", unsafe_allow_html=True)
-
-                    if status == 'pending':
-                        col1, col2 = st.columns([1, 1])
-                        with col1:
-                            if st.button("✅ Mark Resolved", key=f"resolve_{rid}", use_container_width=True):
-                                conn2 = sqlite3.connect(auth.DB_PATH)
-                                conn2.execute("UPDATE dispute_reminders SET status = 'resolved' WHERE id = ?", (rid,))
-                                conn2.commit()
-                                conn2.close()
-                                st.rerun()
-                        with col2:
-                            if st.button("🗑️ Delete", key=f"delete_{rid}", use_container_width=True):
-                                conn2 = sqlite3.connect(auth.DB_PATH)
-                                conn2.execute("DELETE FROM dispute_reminders WHERE id = ?", (rid,))
-                                conn2.commit()
-                                conn2.close()
-                                st.rerun()
-
-                if overdue:
-                    st.markdown("### ⚠️ Overdue Follow-ups")
-                    for r in overdue:
-                        show_dispute_row(r, "overdue")
-
-                if due_soon:
-                    st.markdown("### 🔔 Due This Week")
-                    for r in due_soon:
-                        show_dispute_row(r, "due_soon")
-
-                if upcoming:
-                    st.markdown("### 📅 Upcoming")
-                    for r in upcoming:
-                        show_dispute_row(r, "upcoming")
-
-                if resolved:
-                    with st.expander(f"✅ Resolved ({len(resolved)})"):
-                        for r in resolved:
-                            show_dispute_row(r, "resolved")
-
-        with dtab2:
-            st.subheader("➕ Add New Dispute")
-            bureau_d = st.selectbox("Bureau", ["Experian", "Equifax", "TransUnion"], key="dispute_bureau")
-            description = st.text_area("Dispute Description", placeholder="e.g. Incorrect late payment on Capital One account")
-            col1, col2 = st.columns(2)
-            with col1:
-                sent_date = st.date_input("Date Letter Sent", datetime.now())
-            with col2:
-                follow_up = st.date_input("Follow-up Date", datetime.now() + timedelta(days=35))
-
-            st.caption("💡 Bureaus have 30 days to respond. We recommend following up at day 35.")
-
-            if st.button("💾 Save Dispute", type="primary", use_container_width=True):
-                if description:
-                    c.execute(
-                        "INSERT INTO dispute_reminders (user_id, bureau, dispute_description, sent_date, follow_up_date) VALUES (?, ?, ?, ?, ?)",
-                        (st.session_state.user["id"], bureau_d, description, str(sent_date), str(follow_up))
-                    )
-                    conn.commit()
-                    st.success("✅ Dispute saved! You'll be reminded on your follow-up date.")
-                    st.rerun()
+                if not rows:
+                    st.info("No disputes tracked yet. Use the **Add Dispute** tab to get started!")
                 else:
-                    st.warning("Please enter a dispute description.")
+                    today = datetime.now().date()
+                    overdue = [r for r in rows if r[5] == 'pending' and datetime.strptime(r[4], "%Y-%m-%d").date() < today]
+                    due_soon = [r for r in rows if r[5] == 'pending' and 0 <= (datetime.strptime(r[4], "%Y-%m-%d").date() - today).days <= 7]
+                    upcoming = [r for r in rows if r[5] == 'pending' and (datetime.strptime(r[4], "%Y-%m-%d").date() - today).days > 7]
+                    resolved = [r for r in rows if r[5] == 'resolved']
 
-        with dtab3:
-            st.subheader("📬 Email Dispute Letter to Bureau")
-            st.caption("Send your dispute letter directly via email. Requires a Gmail account with App Password.")
+                    if overdue:
+                        st.error(f"⚠️ {len(overdue)} dispute(s) are OVERDUE for follow-up!")
+                    if due_soon:
+                        st.warning(f"🔔 {len(due_soon)} dispute(s) need follow-up within the next 7 days.")
 
-            if not st.session_state.get('analysis_complete') or not st.session_state.get('errors_found'):
-                st.info("👈 Please upload and analyze a credit report first to generate dispute letters.")
-            else:
-                with st.expander("⚙️ How to get a Gmail App Password"):
-                    st.markdown("""
-                    1. Go to your Google Account → **Security**
-                    2. Enable **2-Step Verification**
-                    3. Go to **App Passwords** → create one for "Mail"
-                    4. Copy the 16-character password and paste below
-                    ⚠️ Never use your regular Gmail password here.
-                    """)
+                    s1, s2, s3, s4 = st.columns(4)
+                    s1.metric("Total", len(rows))
+                    s2.metric("⚠️ Overdue", len(overdue))
+                    s3.metric("🔔 Due Soon", len(due_soon))
+                    s4.metric("✅ Resolved", len(resolved))
 
-                BUREAU_EMAILS = {
-                    "Equifax": "disputeinfo@equifax.com",
-                    "Experian": "disputes@experian.com",
-                    "TransUnion": "transunion@transunion.com"
-                }
+                    st.divider()
 
+                    def show_dispute_row(row, alert_type):
+                        rid, bureau, desc, sent, followup, status = row
+                        follow_date = datetime.strptime(followup, "%Y-%m-%d").date()
+                        days_diff = (follow_date - today).days
+                        if alert_type == "overdue":
+                            border, icon = "#F44336", "🔴"
+                            time_label = f"{abs(days_diff)} days overdue"
+                        elif alert_type == "due_soon":
+                            border, icon = "#FF9800", "🟡"
+                            time_label = f"Follow-up in {days_diff} days"
+                        elif alert_type == "upcoming":
+                            border, icon = "#2E8B57", "🟢"
+                            time_label = f"Follow-up in {days_diff} days"
+                        else:
+                            border, icon = "#9E9E9E", "✅"
+                            time_label = "Resolved"
+                        st.markdown(f"""
+                        <div style='border-left:4px solid {border};padding:0.75rem 1rem;background:{border}10;border-radius:0 8px 8px 0;margin:0.4rem 0;'>
+                            <div style='display:flex;justify-content:space-between;'><strong>{icon} {bureau}</strong><span style='font-size:0.8rem;color:#666;'>{time_label}</span></div>
+                            <div style='color:#444;margin:0.25rem 0;'>{desc}</div>
+                            <div style='font-size:0.75rem;color:#999;'>Sent: {sent} | Follow-up: {followup}</div>
+                        </div>""", unsafe_allow_html=True)
+                        if status == 'pending':
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("✅ Resolved", key=f"resolve_{rid}", use_container_width=True):
+                                    conn2 = sqlite3.connect(auth.DB_PATH)
+                                    conn2.execute("UPDATE dispute_reminders SET status = 'resolved' WHERE id = ?", (rid,))
+                                    conn2.commit()
+                                    conn2.close()
+                                    st.rerun()
+                            with col2:
+                                if st.button("🗑️ Delete", key=f"delete_{rid}", use_container_width=True):
+                                    conn2 = sqlite3.connect(auth.DB_PATH)
+                                    conn2.execute("DELETE FROM dispute_reminders WHERE id = ?", (rid,))
+                                    conn2.commit()
+                                    conn2.close()
+                                    st.rerun()
+
+                    if overdue:
+                        st.markdown("### ⚠️ Overdue")
+                        for r in overdue: show_dispute_row(r, "overdue")
+                    if due_soon:
+                        st.markdown("### 🔔 Due This Week")
+                        for r in due_soon: show_dispute_row(r, "due_soon")
+                    if upcoming:
+                        st.markdown("### 📅 Upcoming")
+                        for r in upcoming: show_dispute_row(r, "upcoming")
+                    if resolved:
+                        with st.expander(f"✅ Resolved ({len(resolved)})"):
+                            for r in resolved: show_dispute_row(r, "resolved")
+
+            with dtab2:
+                st.subheader("➕ Add New Dispute")
+                bureau_d = st.selectbox("Bureau", ["Experian", "Equifax", "TransUnion"], key="dispute_bureau")
+                description = st.text_area("Dispute Description", placeholder="e.g. Incorrect late payment on Capital One")
                 col1, col2 = st.columns(2)
                 with col1:
-                    sender_email = st.text_input("Your Gmail", placeholder="you@gmail.com", key="sender_email")
+                    sent_date = st.date_input("Date Letter Sent", datetime.now())
                 with col2:
-                    sender_password = st.text_input("App Password", type="password", placeholder="16-char password", key="sender_pass")
-
-                bureau_e = st.selectbox("Bureau to Email", ["Equifax", "Experian", "TransUnion"], key="email_bureau")
-                error_options = [f"{e.get('category','Error')} - {e.get('description','')[:60]}" for e in st.session_state.errors_found]
-                selected_idx = st.selectbox("Select Error to Dispute", range(len(error_options)), format_func=lambda x: error_options[x], key="email_error_idx")
-                selected_error = st.session_state.errors_found[selected_idx]
-
-                if st.button("✍️ Generate & Preview Letter", type="primary", use_container_width=True):
-                    if not st.session_state.user_info.get('name'):
-                        st.warning("Please fill in your personal information in the sidebar first.")
+                    follow_up = st.date_input("Follow-up Date", datetime.now() + timedelta(days=35))
+                st.caption("💡 Bureaus have 30 days to respond. We recommend following up at day 35.")
+                if st.button("💾 Save Dispute", type="primary", use_container_width=True):
+                    if description:
+                        c.execute(
+                            "INSERT INTO dispute_reminders (user_id, bureau, dispute_description, sent_date, follow_up_date) VALUES (?, ?, ?, ?, ?)",
+                            (st.session_state.user["id"], bureau_d, description, str(sent_date), str(follow_up))
+                        )
+                        conn.commit()
+                        st.success("✅ Dispute saved!")
+                        st.rerun()
                     else:
-                        client = get_anthropic_client()
-                        with st.spinner("✍️ Generating letter..."):
-                            letter = generate_dispute_letter(selected_error, st.session_state.user_info, bureau_e, client)
-                        st.session_state.email_letter = letter
-                        st.session_state.email_bureau_name = bureau_e
-                        st.success("✅ Letter ready!")
+                        st.warning("Please enter a dispute description.")
 
-                if st.session_state.get('email_letter'):
-                    letter = st.session_state.email_letter
-                    bureau_name = st.session_state.email_bureau_name
-                    st.text_area("📄 Letter Preview (editable)", letter, height=250, key="email_preview")
-
+            with dtab3:
+                st.subheader("📬 Email Dispute Letter")
+                if not st.session_state.get('analysis_complete') or not st.session_state.get('errors_found'):
+                    st.info("👈 Please upload and analyze a credit report first.")
+                else:
+                    BUREAU_EMAILS = {"Equifax": "disputeinfo@equifax.com", "Experian": "disputes@experian.com", "TransUnion": "transunion@transunion.com"}
                     col1, col2 = st.columns(2)
                     with col1:
-                        send_to_bureau = st.checkbox(f"Send to {bureau_name} ({BUREAU_EMAILS[bureau_name]})", value=True)
+                        sender_email = st.text_input("Your Gmail", placeholder="you@gmail.com", key="sender_email")
                     with col2:
-                        send_copy = st.checkbox("Send copy to myself", value=True)
-
-                    if st.button("📤 Send Email", type="primary", use_container_width=True):
-                        if not sender_email or not sender_password:
-                            st.error("Please enter your Gmail credentials above.")
+                        sender_password = st.text_input("App Password", type="password", placeholder="16-char password", key="sender_pass")
+                    bureau_e = st.selectbox("Bureau", ["Equifax", "Experian", "TransUnion"], key="email_bureau")
+                    error_options = [f"{e.get('category','Error')} - {e.get('description','')[:60]}" for e in st.session_state.errors_found]
+                    selected_idx = st.selectbox("Select Error", range(len(error_options)), format_func=lambda x: error_options[x], key="email_error_idx")
+                    selected_error = st.session_state.errors_found[selected_idx]
+                    if st.button("✍️ Generate Letter", type="primary", use_container_width=True):
+                        if not st.session_state.user_info.get('name'):
+                            st.warning("Please fill in your personal info in the sidebar first.")
                         else:
-                            final_letter = st.session_state.get('email_preview', letter)
-                            subject = f"Credit Report Dispute - {st.session_state.user_info.get('name', 'Consumer')}"
-                            success_count = 0
-
-                            def send_email(to, subj, body):
-                                try:
-                                    msg = MIMEMultipart()
-                                    msg['From'] = sender_email
-                                    msg['To'] = to
-                                    msg['Subject'] = subj
-                                    msg.attach(MIMEText(body, 'plain'))
-                                    ctx = ssl.create_default_context()
-                                    with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx) as srv:
-                                        srv.login(sender_email, sender_password)
-                                        srv.sendmail(sender_email, to, msg.as_string())
-                                    return True, "Sent!"
-                                except smtplib.SMTPAuthenticationError:
-                                    return False, "Auth failed. Use a Gmail App Password."
-                                except Exception as e:
-                                    return False, str(e)
-
-                            with st.spinner("📤 Sending..."):
-                                if send_to_bureau:
-                                    ok, msg = send_email(BUREAU_EMAILS[bureau_name], subject, final_letter)
-                                    if ok:
-                                        success_count += 1
-                                        st.success(f"✅ Sent to {bureau_name}!")
-                                    else:
-                                        st.error(f"❌ {msg}")
-                                if send_copy:
-                                    ok, msg = send_email(sender_email, f"[COPY] {subject}", final_letter)
-                                    if ok:
-                                        success_count += 1
-                                        st.success("✅ Copy sent to you!")
-                                    else:
-                                        st.error(f"❌ {msg}")
-
-                            if success_count > 0:
-                                # Auto-save reminder
-                                today_str = datetime.now().strftime("%Y-%m-%d")
-                                followup_str = (datetime.now() + timedelta(days=35)).strftime("%Y-%m-%d")
-                                c.execute(
-                                    "INSERT INTO dispute_reminders (user_id, bureau, dispute_description, sent_date, follow_up_date) VALUES (?, ?, ?, ?, ?)",
-                                    (st.session_state.user["id"], bureau_name,
-                                     selected_error.get('description', 'Dispute'), today_str, followup_str)
-                                )
-                                conn.commit()
-                                st.info(f"🔔 Follow-up reminder auto-set for {followup_str}")
-
-        conn.close()
+                            client = get_anthropic_client()
+                            with st.spinner("✍️ Generating..."):
+                                letter = generate_dispute_letter(selected_error, st.session_state.user_info, bureau_e, client)
+                            st.session_state.email_letter = letter
+                            st.session_state.email_bureau_name = bureau_e
+                            st.success("✅ Letter ready!")
+                    if st.session_state.get('email_letter'):
+                        letter = st.session_state.email_letter
+                        bureau_name = st.session_state.email_bureau_name
+                        st.text_area("📄 Preview (editable)", letter, height=250, key="email_preview")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            send_to_bureau = st.checkbox(f"Send to {bureau_name}", value=True)
+                        with col2:
+                            send_copy = st.checkbox("Send copy to me", value=True)
+                        if st.button("📤 Send", type="primary", use_container_width=True):
+                            if not sender_email or not sender_password:
+                                st.error("Please enter your Gmail credentials.")
+                            else:
+                                final_letter = st.session_state.get('email_preview', letter)
+                                subject = f"Credit Report Dispute - {st.session_state.user_info.get('name', 'Consumer')}"
+                                success_count = 0
+                                def send_email_fn(to, subj, body):
+                                    try:
+                                        msg = MIMEMultipart()
+                                        msg['From'] = sender_email; msg['To'] = to; msg['Subject'] = subj
+                                        msg.attach(MIMEText(body, 'plain'))
+                                        ctx = ssl.create_default_context()
+                                        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx) as srv:
+                                            srv.login(sender_email, sender_password)
+                                            srv.sendmail(sender_email, to, msg.as_string())
+                                        return True, "Sent!"
+                                    except smtplib.SMTPAuthenticationError:
+                                        return False, "Auth failed. Use a Gmail App Password."
+                                    except Exception as e:
+                                        return False, str(e)
+                                with st.spinner("📤 Sending..."):
+                                    if send_to_bureau:
+                                        ok, msg = send_email_fn(BUREAU_EMAILS[bureau_name], subject, final_letter)
+                                        if ok: success_count += 1; st.success(f"✅ Sent to {bureau_name}!")
+                                        else: st.error(f"❌ {msg}")
+                                    if send_copy:
+                                        ok, msg = send_email_fn(sender_email, f"[COPY] {subject}", final_letter)
+                                        if ok: success_count += 1; st.success("✅ Copy sent!")
+                                        else: st.error(f"❌ {msg}")
+                                if success_count > 0:
+                                    today_str = datetime.now().strftime("%Y-%m-%d")
+                                    followup_str = (datetime.now() + timedelta(days=35)).strftime("%Y-%m-%d")
+                                    c.execute("INSERT INTO dispute_reminders (user_id, bureau, dispute_description, sent_date, follow_up_date) VALUES (?, ?, ?, ?, ?)",
+                                              (st.session_state.user["id"], bureau_name, selected_error.get('description', 'Dispute'), today_str, followup_str))
+                                    conn.commit()
+                                    st.info(f"🔔 Follow-up reminder set for {followup_str}")
+            conn.close()
 
     with tab7:
         st.header("🤖 AI Credit Coach")
         st.caption("Your personalized AI coach — daily action steps, progress insights, and smart credit guidance.")
 
-        user_plan = (st.session_state.get("user") or {}).get("plan", "free")
-        is_paid = user_plan in ("basic", "pro", "premium")
+        user_plan_t7 = (st.session_state.get("user") or {}).get("plan", "free")
+        is_paid_t7 = user_plan_t7 in ("basic", "pro", "premium")
 
-        if not is_paid:
+        if not is_paid_t7:
             st.markdown("""
             <div style='padding:32px;border-radius:14px;background:linear-gradient(135deg,#f0f8f0 0%,#e8f5e9 100%);
                         border:2px solid #2E8B57;text-align:center;box-shadow:0 8px 24px rgba(46,139,87,0.15);margin:20px 0;'>
                 <h3 style='color:#1B3A5C;'>🔒 AI Credit Coach is a Paid Feature</h3>
-                <p style='color:#444;'>Get a personalized daily action plan, smart insights, and step-by-step coaching based on your credit profile.</p>
+                <p style='color:#444;'>Get a personalized daily action plan, smart insights, and step-by-step coaching.</p>
                 <p style='color:#666;font-size:0.9rem;'>Available on Basic ($19/mo), Pro ($29/mo), and Premium plans</p>
             </div>""", unsafe_allow_html=True)
-            if st.button("🚀 Upgrade to Unlock AI Credit Coach", type="primary", use_container_width=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("- 📅 Personalized 30-day action plan\n- 🎯 Daily focus — one action at a time\n- 🤖 AI-powered credit coaching")
+            with col2:
+                st.markdown("- 📊 Progress check & analysis\n- 💡 Smart insights based on your report\n- 🏆 Score improvement roadmap")
+            if st.button("🚀 Upgrade to Unlock AI Credit Coach", type="primary", use_container_width=True, key="upgrade_coach"):
                 st.session_state.show_upgrade = True
                 st.session_state.upgrade_source = "ai_coach"
                 st.rerun()
-            st.stop()
-
-        if user_plan == "basic":
-            st.success("🔵 Basic Plan Active")
         else:
-            st.success("⭐ Pro/Premium Plan Active")
-
-        has_report = st.session_state.get('analysis_complete', False)
-        credit_data = st.session_state.get('credit_data', {})
-        errors = st.session_state.get('errors_found', [])
-
-        coach_tab1, coach_tab2, coach_tab3 = st.tabs(["📅 My Action Plan", "🎯 Today's Focus", "📊 Progress Check"])
-
-        with coach_tab1:
-            st.subheader("Your Personalized 30-Day Action Plan")
-            if not has_report:
-                st.info("👈 Upload and analyze a credit report first for a personalized plan.")
+            if user_plan_t7 == "basic":
+                st.success("🔵 Basic Plan Active")
             else:
-                if st.button("🤖 Generate My Action Plan", type="primary", use_container_width=True):
-                    client = get_anthropic_client()
-                    with st.spinner("🤖 AI Coach is building your personalized plan..."):
-                        prompt = f"""You are an expert credit coach. Create a detailed, actionable 30-day credit improvement plan.
+                st.success("⭐ Pro/Premium Plan Active")
 
-Credit Profile:
-- Accounts: {len(credit_data.get('accounts', []))}
-- Negative Items: {len(credit_data.get('negative_items', []))}
-- Errors Found: {len(errors)}
-- Public Records: {len(credit_data.get('public_records', []))}
-- Top Issues: {', '.join([e.get('category','') for e in errors[:3]])}
+            has_report = st.session_state.get('analysis_complete', False)
+            credit_data = st.session_state.get('credit_data', {})
+            errors = st.session_state.get('errors_found', [])
 
-Create a week-by-week plan with:
-**Week 1: Immediate Actions** - Specific daily tasks, what to dispute first and why, quick wins
-**Week 2: Building Momentum** - Follow-up actions, credit building steps
-**Week 3: Optimization** - Advanced strategies, credit mix improvements
-**Week 4: Review & Next Steps** - How to measure progress, what to do next month
+            coach_tab1, coach_tab2, coach_tab3 = st.tabs(["📅 My Action Plan", "🎯 Today's Focus", "📊 Progress Check"])
 
-Be specific, actionable, and encouraging. Format with clear headers and bullet points."""
+            with coach_tab1:
+                st.subheader("Your Personalized 30-Day Action Plan")
+                if not has_report:
+                    st.info("👈 Upload and analyze a credit report first for a personalized plan.")
+                else:
+                    if st.button("🤖 Generate My Action Plan", type="primary", use_container_width=True):
+                        client = get_anthropic_client()
+                        with st.spinner("🤖 Building your plan..."):
+                            prompt = f"""You are an expert credit coach. Create a detailed 30-day credit improvement plan.
+Credit Profile: Accounts: {len(credit_data.get('accounts', []))}, Negatives: {len(credit_data.get('negative_items', []))}, Errors: {len(errors)}, Top Issues: {", ".join([e.get('category','') for e in errors[:3]])}
+Create week-by-week plan: Week 1 immediate actions, Week 2 momentum, Week 3 optimization, Week 4 review.
+Be specific, actionable, encouraging. Use clear headers and bullet points."""
+                            response = client.messages.create(model="claude-3-5-sonnet-latest", max_tokens=2000, messages=[{"role": "user", "content": prompt}])
+                            st.session_state.coach_plan = response.content[0].text
+                    if st.session_state.get('coach_plan'):
+                        st.markdown(st.session_state.coach_plan)
+                        plan_buffer = create_letter_docx(st.session_state.coach_plan)
+                        st.download_button("📥 Download Action Plan", data=plan_buffer,
+                                           file_name=f"credit_action_plan_{datetime.now().strftime('%Y%m%d')}.docx",
+                                           mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                           use_container_width=True)
 
-                        response = client.messages.create(
-                            model="claude-3-5-sonnet-latest",
-                            max_tokens=2000,
-                            messages=[{"role": "user", "content": prompt}]
-                        )
-                        st.session_state.coach_plan = response.content[0].text
+            with coach_tab2:
+                st.subheader("🎯 Today's Focus")
+                if not has_report:
+                    st.info("👈 Upload and analyze a credit report first.")
+                else:
+                    if st.button("🔄 Get Today's Action", type="primary", use_container_width=True):
+                        client = get_anthropic_client()
+                        with st.spinner("🤖 Getting your daily focus..."):
+                            top_error = errors[0] if errors else None
+                            prompt = f"""Credit coach: Give ONE specific actionable task for today.
+Top issue: {top_error.get('category', 'N/A') if top_error else 'None'} - {top_error.get('description', '') if top_error else ''}
+Give: 1) Today's action (specific), 2) Why it matters, 3) How to do it (steps), 4) Time required, 5) Expected impact. One task only."""
+                            response = client.messages.create(model="claude-3-5-sonnet-latest", max_tokens=600, messages=[{"role": "user", "content": prompt}])
+                            st.session_state.todays_focus = response.content[0].text
+                    if st.session_state.get('todays_focus'):
+                        st.markdown(st.session_state.todays_focus)
+                        if st.button("✅ Mark as Done", type="primary"):
+                            st.success("🎉 Great work! Come back tomorrow for your next action.")
+                            st.balloons()
+                            del st.session_state.todays_focus
 
-                if st.session_state.get('coach_plan'):
-                    st.markdown(st.session_state.coach_plan)
-                    plan_buffer = create_letter_docx(st.session_state.coach_plan)
-                    st.download_button(
-                        "📥 Download Action Plan",
-                        data=plan_buffer,
-                        file_name=f"credit_action_plan_{datetime.now().strftime('%Y%m%d')}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True
-                    )
+            with coach_tab3:
+                st.subheader("📊 Progress Check")
+                import sqlite3 as _sqlite3
+                conn3 = _sqlite3.connect(auth.DB_PATH)
+                c3 = conn3.cursor()
+                c3.execute("SELECT COUNT(*) FROM score_history WHERE user_id = ?", (st.session_state.user["id"],))
+                score_count = c3.fetchone()[0]
+                c3.execute("SELECT COUNT(*) FROM dispute_reminders WHERE user_id = ?", (st.session_state.user["id"],))
+                dispute_count = c3.fetchone()[0]
+                c3.execute("SELECT COUNT(*) FROM dispute_reminders WHERE user_id = ? AND status = 'resolved'", (st.session_state.user["id"],))
+                resolved_count = c3.fetchone()[0]
+                conn3.close()
 
-        with coach_tab2:
-            st.subheader("🎯 Today's Focus")
-            if not has_report:
-                st.info("👈 Upload and analyze a credit report first.")
-            else:
-                if st.button("🔄 Get Today's Action", type="primary", use_container_width=True):
-                    client = get_anthropic_client()
-                    with st.spinner("🤖 Getting your daily focus..."):
-                        top_error = errors[0] if errors else None
-                        prompt = f"""You are a credit coach. Give ONE specific, actionable task for today.
+                p1, p2, p3, p4 = st.columns(4)
+                p1.metric("Scores Logged", score_count)
+                p2.metric("Disputes Filed", dispute_count)
+                p3.metric("Resolved", resolved_count)
+                p4.metric("Errors Found", len(errors) if has_report else "—")
 
-Top issue: {top_error.get('category', 'N/A') if top_error else 'None'}
-Description: {top_error.get('description', '') if top_error else ''}
-Errors found: {len(errors)}
+                st.divider()
+                if score_count > 0 or dispute_count > 0:
+                    if st.button("🤖 Get Progress Analysis", type="primary", use_container_width=True):
+                        client = get_anthropic_client()
+                        with st.spinner("Analyzing your progress..."):
+                            prompt = f"""Credit coach: Give encouraging progress report.
+Stats: Scores logged: {score_count}, Disputes filed: {dispute_count}, Resolved: {resolved_count}, Errors identified: {len(errors) if has_report else 0}
+Give: 1) Progress assessment, 2) What's working, 3) Next priority, 4) Encouragement. Personal and uplifting."""
+                            response = client.messages.create(model="claude-3-5-sonnet-latest", max_tokens=600, messages=[{"role": "user", "content": prompt}])
+                            st.markdown(response.content[0].text)
+                else:
+                    st.info("Start logging scores and filing disputes to see your progress analysis here!")
 
-Give:
-1. **Today's Single Most Important Action** (be very specific)
-2. **Why this matters** (1-2 sentences)
-3. **Exactly how to do it** (step by step)
-4. **Time required** (estimate)
-5. **Expected impact** on credit score
-
-Keep it focused and motivating. One task only."""
-
-                        response = client.messages.create(
-                            model="claude-3-5-sonnet-latest",
-                            max_tokens=600,
-                            messages=[{"role": "user", "content": prompt}]
-                        )
-                        st.session_state.todays_focus = response.content[0].text
-
-                if st.session_state.get('todays_focus'):
-                    st.markdown(st.session_state.todays_focus)
-                    if st.button("✅ Mark as Done", type="primary"):
-                        st.success("🎉 Great work! Come back tomorrow for your next action.")
-                        st.balloons()
-                        del st.session_state.todays_focus
-
-        with coach_tab3:
-            st.subheader("📊 Progress Check")
-            import sqlite3 as _sqlite3
-            conn3 = _sqlite3.connect(auth.DB_PATH)
-            c3 = conn3.cursor()
-            c3.execute("SELECT COUNT(*) FROM score_history WHERE user_id = ?", (st.session_state.user["id"],))
-            score_count = c3.fetchone()[0]
-            c3.execute("SELECT COUNT(*) FROM dispute_reminders WHERE user_id = ?", (st.session_state.user["id"],))
-            dispute_count = c3.fetchone()[0]
-            c3.execute("SELECT COUNT(*) FROM dispute_reminders WHERE user_id = ? AND status = 'resolved'", (st.session_state.user["id"],))
-            resolved_count = c3.fetchone()[0]
-            conn3.close()
-
-            p1, p2, p3, p4 = st.columns(4)
-            p1.metric("Scores Logged", score_count)
-            p2.metric("Disputes Filed", dispute_count)
-            p3.metric("Resolved", resolved_count)
-            p4.metric("Errors Found", len(errors) if has_report else "—")
-
-            st.divider()
-            if score_count > 0 or dispute_count > 0:
-                if st.button("🤖 Get Progress Analysis", type="primary", use_container_width=True):
-                    client = get_anthropic_client()
-                    with st.spinner("Analyzing your progress..."):
-                        prompt = f"""You are a credit coach reviewing a client's progress. Give an encouraging, specific progress report.
-
-Stats:
-- Credit scores logged: {score_count}
-- Disputes filed: {dispute_count}
-- Disputes resolved: {resolved_count}
-- Errors identified: {len(errors) if has_report else 0}
-
-Give:
-1. **Progress Assessment** — what they've accomplished
-2. **What's Working** — positive momentum
-3. **Next Priority** — single most important next step
-4. **Encouragement** — motivating message
-
-Keep it personal, specific, and uplifting."""
-
-                        response = client.messages.create(
-                            model="claude-3-5-sonnet-latest",
-                            max_tokens=600,
-                            messages=[{"role": "user", "content": prompt}]
-                        )
-                        st.markdown(response.content[0].text)
-            else:
-                st.info("Start logging scores and filing disputes to see your progress analysis here!")
 
     # Footer
     st.markdown(
