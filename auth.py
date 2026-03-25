@@ -1,62 +1,51 @@
 """
 Authentication System for Credit CPR
-Handles user signup, login, and session management
+Uses SQLite on Render Persistent Disk
 """
 
 import streamlit as st
-import psycopg2
+import sqlite3
 import hashlib
 import secrets
 from datetime import datetime
 import os
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Persistent disk path on Render
+DB_PATH = "/opt/render/project/src/data/users.db"
 
-def get_conn():
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+# Make sure the data directory exists
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 def init_database():
-    """Initialize the user database"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            plan TEXT DEFAULT 'free',
-            reports_analyzed INTEGER DEFAULT 0,
-            disputes_purchased INTEGER DEFAULT 0
-        )
-    ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS analysis_history (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            report_name TEXT,
-            errors_found INTEGER,
-            analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS dispute_letters (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            bureau TEXT,
-            error_description TEXT,
-            status TEXT DEFAULT 'draft',
-            purchased BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        plan TEXT DEFAULT 'free',
+        reports_analyzed INTEGER DEFAULT 0,
+        disputes_purchased INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS analysis_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        report_name TEXT,
+        errors_found INTEGER,
+        analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS dispute_letters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        bureau TEXT,
+        error_description TEXT,
+        status TEXT DEFAULT 'draft',
+        purchased BOOLEAN DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    )''')
     conn.commit()
     conn.close()
 
@@ -76,7 +65,7 @@ def create_user(email: str, password: str) -> tuple:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         password_hash = hash_password(password)
-        c.execute('INSERT INTO users (email, password_hash) VALUES (%S, %S)', (email, password_hash))
+        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
         conn.commit()
         conn.close()
         return True, "Account created successfully!"
@@ -89,7 +78,7 @@ def authenticate_user(email: str, password: str) -> tuple:
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute('SELECT id, email, password_hash, plan, reports_analyzed, disputes_purchased FROM users WHERE email = %S', (email,))
+        c.execute('SELECT id, email, password_hash, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
         user = c.fetchone()
         conn.close()
         if user and verify_password(password, user[2]):
@@ -107,11 +96,11 @@ def authenticate_user(email: str, password: str) -> tuple:
 def get_user_stats(user_id: int) -> dict:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('SELECT COUNT(*) FROM analysis_history WHERE user_id = %S', (user_id,))
+    c.execute('SELECT COUNT(*) FROM analysis_history WHERE user_id = ?', (user_id,))
     analyses = c.fetchone()[0]
-    c.execute('SELECT COUNT(*) FROM dispute_letters WHERE user_id = %SAND purchased = 1', (user_id,))
+    c.execute('SELECT COUNT(*) FROM dispute_letters WHERE user_id = ? AND purchased = 1', (user_id,))
     disputes = c.fetchone()[0]
-    c.execute('SELECT plan, reports_analyzed, disputes_purchased FROM users WHERE id = %S', (user_id,))
+    c.execute('SELECT plan, reports_analyzed, disputes_purchased FROM users WHERE id = ?', (user_id,))
     user_data = c.fetchone()
     conn.close()
     return {
@@ -125,7 +114,7 @@ def get_user_stats(user_id: int) -> dict:
 def update_user_plan(user_id: int, plan: str):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('UPDATE users SET plan = %SWHERE id = %S', (plan, user_id))
+    c.execute('UPDATE users SET plan = ? WHERE id = ?', (plan, user_id))
     conn.commit()
     conn.close()
     if st.session_state.get('user') and st.session_state.user['id'] == user_id:
@@ -150,18 +139,18 @@ def can_analyze_report(user_id: int) -> tuple:
 def record_analysis(user_id: int, report_name: str, errors_found: int):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('INSERT INTO analysis_history (user_id, report_name, errors_found) VALUES (%S, %S, %S)',
+    c.execute('INSERT INTO analysis_history (user_id, report_name, errors_found) VALUES (?, ?, ?)',
               (user_id, report_name, errors_found))
-    c.execute('UPDATE users SET reports_analyzed = reports_analyzed + 1 WHERE id = %S', (user_id,))
+    c.execute('UPDATE users SET reports_analyzed = reports_analyzed + 1 WHERE id = ?', (user_id,))
     conn.commit()
     conn.close()
 
 def save_dispute_letter(user_id: int, bureau: str, error_description: str) -> int:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('INSERT INTO dispute_letters (user_id, bureau, error_description) VALUES (%S, %S, %S)',
+    c.execute('INSERT INTO dispute_letters (user_id, bureau, error_description) VALUES (?, ?, ?)',
               (user_id, bureau, error_description))
-    letter_id = c.c.fetchone()[0]
+    letter_id = c.lastrowid
     conn.commit()
     conn.close()
     return letter_id
@@ -169,17 +158,16 @@ def save_dispute_letter(user_id: int, bureau: str, error_description: str) -> in
 def purchase_dispute_letter(user_id: int, letter_id: int):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('UPDATE dispute_letters SET purchased = 1, status = %SWHERE id = %SAND user_id = %S',
+    c.execute('UPDATE dispute_letters SET purchased = 1, status = ? WHERE id = ? AND user_id = ?',
               ('ready', letter_id, user_id))
-    c.execute('UPDATE users SET disputes_purchased = disputes_purchased + 1 WHERE id = %S', (user_id,))
+    c.execute('UPDATE users SET disputes_purchased = disputes_purchased + 1 WHERE id = ?', (user_id,))
     conn.commit()
     conn.close()
 
 def get_user_disputes(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''SELECT id, bureau, error_description, status, purchased, created_at 
-                 FROM dispute_letters WHERE user_id = %SORDER BY created_at DESC''', (user_id,))
+    c.execute('SELECT id, bureau, error_description, status, purchased, created_at FROM dispute_letters WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
     disputes = c.fetchall()
     conn.close()
     return disputes
@@ -202,7 +190,7 @@ def show_login_page_original():
             submit = st.form_submit_button("Sign In", use_container_width=True)
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("🔑 Forgot Password%S", use_container_width=True):
+            if st.button("🔑 Forgot Password?", use_container_width=True):
                 st.session_state.show_forgot_password = True
                 st.rerun()
         if submit:
