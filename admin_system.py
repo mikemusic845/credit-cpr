@@ -8,7 +8,7 @@ Allows admins to:
 """
 
 import streamlit as st
-import sqlite3
+import psycopg2
 import auth
 import secrets
 from datetime import datetime, timedelta
@@ -30,7 +30,7 @@ def init_admin_tables():
     # Discount codes table
     c.execute('''
         CREATE TABLE IF NOT EXISTS discount_codes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             code TEXT UNIQUE NOT NULL,
             discount_percent INTEGER,
             plan_override TEXT,
@@ -43,7 +43,7 @@ def init_admin_tables():
     # User overrides table (for manually granted access)
     c.execute('''
         CREATE TABLE IF NOT EXISTS user_overrides (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             override_type TEXT NOT NULL,
             reason TEXT,
@@ -63,7 +63,7 @@ def grant_user_access(user_email, plan='premium', duration_days=None, reason='')
     c = conn.cursor()
     
     # Get user
-    c.execute('SELECT id FROM users WHERE email = ?', (user_email,))
+    c.execute('SELECT id FROM users WHERE email = %S', (user_email,))
     user = c.fetchone()
     
     if not user:
@@ -73,7 +73,7 @@ def grant_user_access(user_email, plan='premium', duration_days=None, reason='')
     user_id = user[0]
     
     # Update user's plan
-    c.execute('UPDATE users SET plan = ? WHERE id = ?', (plan, user_id))
+    c.execute('UPDATE users SET plan = %S WHERE id = %S', (plan, user_id))
     
     # Record the override
     expires_at = None
@@ -84,7 +84,7 @@ def grant_user_access(user_email, plan='premium', duration_days=None, reason='')
     
     c.execute('''INSERT INTO user_overrides 
                  (user_id, override_type, reason, granted_by, expires_at) 
-                 VALUES (?, ?, ?, ?, ?)''',
+                 VALUES (%S, %S, %S, %S, %S)''',
               (user_id, f'plan_{plan}', reason, admin_email, expires_at))
     
     conn.commit()
@@ -104,7 +104,7 @@ def create_discount_code(code, discount_percent=None, plan_override=None, uses=N
     try:
         c.execute('''INSERT INTO discount_codes 
                      (code, discount_percent, plan_override, uses_remaining, expires_at) 
-                     VALUES (?, ?, ?, ?, ?)''',
+                     VALUES (%S, %S, %S, %S, %S)''',
                   (code.upper(), discount_percent, plan_override, uses, expires_at))
         conn.commit()
         conn.close()
@@ -120,7 +120,7 @@ def apply_discount_code(user_id, code):
     
     # Get discount code
     c.execute('''SELECT id, discount_percent, plan_override, uses_remaining, expires_at 
-                 FROM discount_codes WHERE code = ?''', (code.upper(),))
+                 FROM discount_codes WHERE code = %S''', (code.upper(),))
     discount = c.fetchone()
     
     if not discount:
@@ -142,7 +142,7 @@ def apply_discount_code(user_id, code):
     # Apply the discount/plan
     if plan_override:
         # Grant free access to a plan
-        c.execute('UPDATE users SET plan = ? WHERE id = ?', (plan_override, user_id))
+        c.execute('UPDATE users SET plan = %S WHERE id = %S', (plan_override, user_id))
         message = f"✅ Applied! You now have {plan_override} access"
     else:
         # TODO: Handle percentage discounts (would integrate with Stripe)
@@ -150,7 +150,7 @@ def apply_discount_code(user_id, code):
     
     # Decrement uses
     if uses_remaining is not None:
-        c.execute('UPDATE discount_codes SET uses_remaining = uses_remaining - 1 WHERE id = ?', (discount_id,))
+        c.execute('UPDATE discount_codes SET uses_remaining = uses_remaining - 1 WHERE id = %S', (discount_id,))
     
     conn.commit()
     conn.close()
@@ -263,7 +263,7 @@ def show_admin_panel():
 def show_discount_code_input():
     """Show discount code input for users"""
     if st.session_state.user['plan'] == 'free':
-        with st.expander("💎 Have a discount code?"):
+        with st.expander("💎 Have a discount code%S"):
             with st.form("apply_code_form"):
                 code = st.text_input("Enter code", placeholder="SUMMER2024")
                 if st.form_submit_button("Apply Code"):
