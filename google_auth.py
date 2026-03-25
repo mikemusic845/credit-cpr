@@ -1,27 +1,24 @@
 """
 Google OAuth for Streamlit - Working Implementation
-Uses streamlit-oauth for proper Google Sign-In
 """
 
 import streamlit as st
 import requests
 import os
+import sqlite3
 from urllib.parse import urlencode
 
-# Google OAuth Configuration - using environment variables only (no st.secrets)
+# Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
-# OAuth URLs
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-# Redirect URI - reads from environment variable, defaults to production URL
 REDIRECT_URI = os.getenv("REDIRECT_URI", "https://credit-cpr.onrender.com")
 
 def get_google_auth_url():
-    """Generate Google OAuth URL"""
     params = {
         'client_id': GOOGLE_CLIENT_ID,
         'redirect_uri': REDIRECT_URI,
@@ -33,7 +30,6 @@ def get_google_auth_url():
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 def exchange_code_for_token(code):
-    """Exchange authorization code for access token"""
     data = {
         'code': code,
         'client_id': GOOGLE_CLIENT_ID,
@@ -45,13 +41,11 @@ def exchange_code_for_token(code):
     return response.json()
 
 def get_user_info(access_token):
-    """Get user info from Google"""
     headers = {'Authorization': f'Bearer {access_token}'}
     response = requests.get(GOOGLE_USER_INFO_URL, headers=headers)
     return response.json()
 
 def handle_google_callback():
-    """Handle OAuth callback from Google"""
     try:
         params = st.query_params
     except AttributeError:
@@ -74,13 +68,10 @@ def handle_google_callback():
 
                 if email:
                     import auth
-                    
-                    try:
-                        # Use PostgreSQL connection from auth module
-                        conn = auth.get_conn()
-                        c = conn.cursor()
-                        # Check if user exists in PostgreSQL
-                        c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = %s', (email,))))
+                    conn = sqlite3.connect("users.db")
+                    c = conn.cursor()
+
+                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
                     user = c.fetchone()
 
                     if user:
@@ -97,8 +88,8 @@ def handle_google_callback():
                     else:
                         import secrets
                         random_password = secrets.token_urlsafe(32)
-                        c.execute('INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id', (email, password_hash))
-                        user_id = c.fetchone()[0]
+                        password_hash = auth.hash_password(random_password)
+                        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
                         user_id = c.lastrowid
                         conn.commit()
                         user_data = {
@@ -111,10 +102,7 @@ def handle_google_callback():
                         st.session_state.authenticated = True
                         st.session_state.user = user_data
                         st.success(f"✅ Account created with Google! Welcome {name}!")
-                        conn.close()
-                    
-                    except Exception as db_error:
-                        st.error(f"Database error: {str(db_error)}")
+
                     conn.close()
 
                     try:
@@ -136,7 +124,6 @@ def handle_google_callback():
                 st.experimental_set_query_params()
 
 def show_google_login_button():
-    """Show Google Sign-In button"""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         return
 
@@ -177,7 +164,6 @@ def show_google_login_button():
     """, unsafe_allow_html=True)
 
 def show_login_page_with_google():
-    """Display login/signup page with Google Auth"""
     handle_google_callback()
 
     st.markdown("## Welcome to Credit CPR")
