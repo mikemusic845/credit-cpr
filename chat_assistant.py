@@ -197,9 +197,11 @@ def show_chat_assistant():
             if st.button(question, key=f"quick_{i}", use_container_width=True):
                 if not is_paid:
                     st.session_state.show_upgrade = True
+                    st.session_state.upgrade_source = "chat"
                     st.rerun()
                 else:
                     st.session_state.pending_message = question
+                    st.rerun()
 
     st.divider()
 
@@ -226,6 +228,7 @@ def show_chat_assistant():
 
         if st.button("🚀 Upgrade to Unlock AI Chat", type="primary", use_container_width=True):
             st.session_state.show_upgrade = True
+            st.session_state.upgrade_source = "chat"
             st.rerun()
 
         st.markdown("### 💡 What you can ask with a paid plan:")
