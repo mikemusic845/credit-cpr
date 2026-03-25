@@ -724,10 +724,7 @@ def main():
                         st.session_state.errors_found,
                         client
                     )
-
-    with tab4:
-        from chat_assistant import show_chat_assistant
-        show_chat_assistant()            
+          
                 st.success("[OK] Your plan is ready!")
                 st.markdown(plan)
                 
@@ -740,6 +737,10 @@ def main():
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True
                 )
+                
+    with tab4:
+        from chat_assistant import show_chat_assistant
+        show_chat_assistant()            
     
     # Footer
     st.markdown(
