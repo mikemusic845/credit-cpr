@@ -5,7 +5,7 @@ Google OAuth for Streamlit - Working Implementation
 import streamlit as st
 import requests
 import os
-import sqlite3
+import psycopg2
 from urllib.parse import urlencode
 
 # Google OAuth Configuration
@@ -27,7 +27,7 @@ def get_google_auth_url():
         'access_type': 'offline',
         'prompt': 'consent'
     }
-    return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
+    return f"{GOOGLE_AUTH_URL}%S{urlencode(params)}"
 
 def exchange_code_for_token(code):
     data = {
@@ -71,7 +71,7 @@ def handle_google_callback():
                     conn = sqlite3.connect("users.db")
                     c = conn.cursor()
 
-                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
+                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = %S', (email,))
                     user = c.fetchone()
 
                     if user:
@@ -89,8 +89,8 @@ def handle_google_callback():
                         import secrets
                         random_password = secrets.token_urlsafe(32)
                         password_hash = auth.hash_password(random_password)
-                        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
-                        user_id = c.lastrowid
+                        c.execute('INSERT INTO users (email, password_hash) VALUES (%S, %S)', (email, password_hash))
+                        user_id = c.c.fetchone()[0]
                         conn.commit()
                         user_data = {
                             'id': user_id,
@@ -181,7 +181,7 @@ def show_login_page_with_google():
 
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("🔑 Forgot Password?", use_container_width=True):
+            if st.button("🔑 Forgot Password%S", use_container_width=True):
                 st.session_state.show_forgot_password = True
                 st.rerun()
 
