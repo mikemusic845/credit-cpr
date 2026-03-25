@@ -1,212 +1,196 @@
 """
-Authentication System for Credit CPR
-Handles user signup, login, and session management
+Google OAuth for Streamlit - Working Implementation
 """
 
 import streamlit as st
-import sqlite3
-import hashlib
-import secrets
-from datetime import datetime
+import requests
 import os
+import sqlite3
+from urllib.parse import urlencode
 
-# Database setup
-DB_PATH = "users.db"
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
-def init_database():
-    """Initialize the user database"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            plan TEXT DEFAULT 'free',
-            reports_analyzed INTEGER DEFAULT 0,
-            disputes_purchased INTEGER DEFAULT 0
-        )
-    ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS analysis_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            report_name TEXT,
-            errors_found INTEGER,
-            analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS dispute_letters (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            bureau TEXT,
-            error_description TEXT,
-            status TEXT DEFAULT 'draft',
-            purchased BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
-    return salt + pwd_hash.hex()
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://credit-cpr.onrender.com")
 
-def verify_password(password: str, password_hash: str) -> bool:
-    salt = password_hash[:32]
-    stored_hash = password_hash[32:]
-    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
-    return pwd_hash.hex() == stored_hash
-
-def create_user(email: str, password: str) -> tuple:
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        password_hash = hash_password(password)
-        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
-        conn.commit()
-        conn.close()
-        return True, "Account created successfully!"
-    except sqlite3.IntegrityError:
-        return False, "Email already exists"
-    except Exception as e:
-        return False, f"Error: {str(e)}"
-
-def authenticate_user(email: str, password: str) -> tuple:
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('SELECT id, email, password_hash, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
-        user = c.fetchone()
-        conn.close()
-        if user and verify_password(password, user[2]):
-            return True, {
-                'id': user[0],
-                'email': user[1],
-                'plan': user[3],
-                'reports_analyzed': user[4],
-                'disputes_purchased': user[5]
-            }
-        return False, {}
-    except Exception as e:
-        return False, {}
-
-def get_user_stats(user_id: int) -> dict:
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT COUNT(*) FROM analysis_history WHERE user_id = ?', (user_id,))
-    analyses = c.fetchone()[0]
-    c.execute('SELECT COUNT(*) FROM dispute_letters WHERE user_id = ? AND purchased = 1', (user_id,))
-    disputes = c.fetchone()[0]
-    c.execute('SELECT plan, reports_analyzed, disputes_purchased FROM users WHERE id = ?', (user_id,))
-    user_data = c.fetchone()
-    conn.close()
-    return {
-        'total_analyses': analyses,
-        'total_disputes': disputes,
-        'plan': user_data[0],
-        'reports_analyzed': user_data[1],
-        'disputes_purchased': user_data[2]
+def get_google_auth_url():
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'access_type': 'offline',
+        'prompt': 'consent'
     }
+    return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
-def update_user_plan(user_id: int, plan: str):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('UPDATE users SET plan = ? WHERE id = ?', (plan, user_id))
-    conn.commit()
-    conn.close()
-    if st.session_state.get('user') and st.session_state.user['id'] == user_id:
-        st.session_state.user['plan'] = plan
+def exchange_code_for_token(code):
+    data = {
+        'code': code,
+        'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET,
+        'redirect_uri': REDIRECT_URI,
+        'grant_type': 'authorization_code'
+    }
+    response = requests.post(GOOGLE_TOKEN_URL, data=data)
+    return response.json()
 
-def get_all_users():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased, created_at FROM users ORDER BY created_at DESC')
-    users = c.fetchall()
-    conn.close()
-    return users
+def get_user_info(access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = requests.get(GOOGLE_USER_INFO_URL, headers=headers)
+    return response.json()
 
-def can_analyze_report(user_id: int) -> tuple:
-    stats = get_user_stats(user_id)
-    if stats['plan'] in ('premium', 'pro', 'basic'):
-        return True, "Unlimited analyses"
-    if stats['reports_analyzed'] >= 1:
-        return False, "Free tier limit reached (1 report). Upgrade for unlimited analyses."
-    return True, f"You have {1 - stats['reports_analyzed']} analysis remaining"
-
-def record_analysis(user_id: int, report_name: str, errors_found: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('INSERT INTO analysis_history (user_id, report_name, errors_found) VALUES (?, ?, ?)',
-              (user_id, report_name, errors_found))
-    c.execute('UPDATE users SET reports_analyzed = reports_analyzed + 1 WHERE id = ?', (user_id,))
-    conn.commit()
-    conn.close()
-
-def save_dispute_letter(user_id: int, bureau: str, error_description: str) -> int:
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('INSERT INTO dispute_letters (user_id, bureau, error_description) VALUES (?, ?, ?)',
-              (user_id, bureau, error_description))
-    letter_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    return letter_id
-
-def purchase_dispute_letter(user_id: int, letter_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('UPDATE dispute_letters SET purchased = 1, status = ? WHERE id = ? AND user_id = ?',
-              ('ready', letter_id, user_id))
-    c.execute('UPDATE users SET disputes_purchased = disputes_purchased + 1 WHERE id = ?', (user_id,))
-    conn.commit()
-    conn.close()
-
-def get_user_disputes(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''SELECT id, bureau, error_description, status, purchased, created_at 
-                 FROM dispute_letters WHERE user_id = ? ORDER BY created_at DESC''', (user_id,))
-    disputes = c.fetchall()
-    conn.close()
-    return disputes
-
-def show_login_page():
+def handle_google_callback():
     try:
-        from google_auth import show_login_page_with_google
-        show_login_page_with_google()
-    except ImportError:
-        show_login_page_original()
+        params = st.query_params
+    except AttributeError:
+        params = st.experimental_get_query_params()
 
-def show_login_page_original():
+    code = None
+    if isinstance(params, dict):
+        code = params.get('code', [None])[0] if 'code' in params else None
+    else:
+        code = params.get('code', None)
+
+    if code:
+        try:
+            token_data = exchange_code_for_token(code)
+
+            if 'access_token' in token_data:
+                user_info = get_user_info(token_data['access_token'])
+                email = user_info.get('email')
+                name = user_info.get('name', '')
+
+                if email:
+                    import auth
+                    conn = sqlite3.connect("users.db")
+                    c = conn.cursor()
+
+                    c.execute('SELECT id, email, plan, reports_analyzed, disputes_purchased FROM users WHERE email = ?', (email,))
+                    user = c.fetchone()
+
+                    if user:
+                        user_data = {
+                            'id': user[0],
+                            'email': user[1],
+                            'plan': user[2],
+                            'reports_analyzed': user[3],
+                            'disputes_purchased': user[4]
+                        }
+                        st.session_state.authenticated = True
+                        st.session_state.user = user_data
+                        st.success(f"✅ Signed in with Google as {email}")
+                    else:
+                        import secrets
+                        random_password = secrets.token_urlsafe(32)
+                        password_hash = auth.hash_password(random_password)
+                        c.execute('INSERT INTO users (email, password_hash) VALUES (?, ?)', (email, password_hash))
+                        user_id = c.lastrowid
+                        conn.commit()
+                        user_data = {
+                            'id': user_id,
+                            'email': email,
+                            'plan': 'free',
+                            'reports_analyzed': 0,
+                            'disputes_purchased': 0
+                        }
+                        st.session_state.authenticated = True
+                        st.session_state.user = user_data
+                        st.success(f"✅ Account created with Google! Welcome {name}!")
+
+                    conn.close()
+
+                    try:
+                        st.query_params.clear()
+                    except:
+                        st.experimental_set_query_params()
+
+                    st.rerun()
+                else:
+                    st.error("Could not get email from Google")
+            else:
+                st.error("Failed to get access token from Google")
+
+        except Exception as e:
+            st.error(f"Error during Google sign-in: {str(e)}")
+            try:
+                st.query_params.clear()
+            except:
+                st.experimental_set_query_params()
+
+def show_google_login_button():
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return
+
+    google_auth_url = get_google_auth_url()
+
+    st.markdown(f"""
+    <div style='text-align: center; margin: 20px 0;'>
+        <a href='{google_auth_url}' target='_self' style='text-decoration: none;'>
+            <div style='
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 12px 24px;
+                background: white;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 500;
+                color: #333;
+                transition: all 0.2s;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            '>
+                <svg width="20" height="20" viewBox="0 0 20 20" style="margin-right: 12px;">
+                    <path fill="#4285F4" d="M19.6 10.23c0-.82-.1-1.42-.25-2.05H10v3.72h5.5c-.15.96-.74 2.31-2.04 3.22v2.45h3.16c1.89-1.73 2.98-4.3 2.98-7.34z"/>
+                    <path fill="#34A853" d="M13.46 15.13c-.83.59-1.96 1-3.46 1-2.64 0-4.88-1.74-5.68-4.15H1.07v2.52C2.72 17.75 6.09 20 10 20c2.7 0 4.96-.89 6.62-2.42l-3.16-2.45z"/>
+                    <path fill="#FBBC05" d="M3.99 10c0-.69.12-1.35.32-1.97V5.51H1.07A9.973 9.973 0 000 10c0 1.61.39 3.14 1.07 4.49l3.24-2.52c-.2-.62-.32-1.28-.32-1.97z"/>
+                    <path fill="#EA4335" d="M10 3.88c1.88 0 3.13.81 3.85 1.48l2.84-2.76C14.96.99 12.7 0 10 0 6.09 0 2.72 2.25 1.07 5.51l3.24 2.52C5.12 5.62 7.36 3.88 10 3.88z"/>
+                </svg>
+                Sign in with Google
+            </div>
+        </a>
+    </div>
+    <div style='text-align: center; margin: 20px 0; color: #666;'>
+        <span style='background: white; padding: 0 10px; position: relative; z-index: 1;'>or</span>
+        <hr style='margin-top: -12px; border: 1px solid #ddd;'>
+    </div>
+    """, unsafe_allow_html=True)
+
+def show_login_page_with_google():
+    handle_google_callback()
+
     st.markdown("## Welcome to Credit CPR")
     st.write("Sign in to access your AI-powered credit repair assistant")
+
+    show_google_login_button()
+
     tab1, tab2 = st.tabs(["Sign In", "Create Account"])
+
     with tab1:
         with st.form("login_form"):
             email = st.text_input("Email", key="login_email")
             password = st.text_input("Password", type="password", key="login_password")
             submit = st.form_submit_button("Sign In", use_container_width=True)
+
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             if st.button("🔑 Forgot Password?", use_container_width=True):
                 st.session_state.show_forgot_password = True
                 st.rerun()
+
         if submit:
             if not email or not password:
                 st.error("Please enter both email and password")
             else:
-                success, user_data = authenticate_user(email, password)
+                import auth
+                success, user_data = auth.authenticate_user(email, password)
                 if success:
                     st.session_state.authenticated = True
                     st.session_state.user = user_data
@@ -214,6 +198,7 @@ def show_login_page_original():
                     st.rerun()
                 else:
                     st.error("❌ Invalid email or password")
+
     with tab2:
         with st.form("signup_form"):
             new_email = st.text_input("Email", key="signup_email")
@@ -222,6 +207,7 @@ def show_login_page_original():
             st.caption("Password must be at least 8 characters")
             agree = st.checkbox("I agree that Credit CPR is an educational assistant, not a credit repair service")
             submit = st.form_submit_button("Create Account", use_container_width=True)
+
         if submit:
             if not agree:
                 st.error("Please agree to the terms")
@@ -232,55 +218,9 @@ def show_login_page_original():
             elif not new_email or '@' not in new_email:
                 st.error("Please enter a valid email")
             else:
-                success, message = create_user(new_email, new_password)
+                import auth
+                success, message = auth.create_user(new_email, new_password)
                 if success:
                     st.success("✅ Account created! Please sign in.")
                 else:
                     st.error(f"❌ {message}")
-
-def show_user_dashboard():
-    user = st.session_state.user
-    stats = get_user_stats(user['id'])
-    st.session_state.user['plan'] = stats['plan']
-    with st.sidebar:
-        st.markdown(f"### 👤 {user['email']}")
-        if stats['plan'] in ('pro', 'premium'):
-            st.success("⭐ Pro Plan")
-        elif stats['plan'] == 'basic':
-            st.info("🔵 Basic Plan")
-        else:
-            st.info("📦 Free Tier")
-        st.markdown("---")
-        st.markdown("**📊 Your Usage**")
-        if stats['plan'] == 'free':
-            st.write(f"Reports Analyzed: {stats['reports_analyzed']}/1")
-            if stats['reports_analyzed'] >= 1:
-                st.warning("⚠️ Free tier limit reached")
-            import stripe_integration
-            if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
-                st.session_state.show_upgrade = True
-                st.rerun()
-        else:
-            st.write(f"Reports Analyzed: {stats['reports_analyzed']}")
-            import stripe_integration
-            if st.button("🔧 Manage Subscription", use_container_width=True):
-                st.session_state.show_manage = True
-                st.rerun()
-        st.write(f"Disputes Purchased: {stats['disputes_purchased']}")
-        st.markdown("---")
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.user = None
-            st.session_state.show_landing = True
-            st.rerun()
-
-def require_auth(func):
-    def wrapper(*args, **kwargs):
-        if not st.session_state.get('authenticated', False):
-            show_login_page()
-            return
-        return func(*args, **kwargs)
-    return wrapper
-
-# Initialize database on import
-init_database()
