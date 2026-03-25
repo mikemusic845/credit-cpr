@@ -543,7 +543,14 @@ def main():
         st.caption("💡 **Tip:** Fill this out before uploading your report")
     
     # Main content area
-    tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan", "💬 AI Assistant"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📤 Upload & Analyze",
+        "📝 Dispute Letters",
+        "📈 Credit Plan",
+        "💬 AI Assistant",
+        "📊 Score Tracker",
+        "📅 Dispute Tracker"
+    ])
     
     with tab1:
         st.header("Step 1: Upload Your Credit Report")
@@ -740,7 +747,138 @@ def main():
                 
     with tab4:
         from chat_assistant import show_chat_assistant
-        show_chat_assistant()            
+        show_chat_assistant()
+
+    with tab5:
+        st.header("📊 Credit Score Tracker")
+
+        user_plan = (st.session_state.get("user") or {}).get("plan", "free")
+        is_paid = user_plan in ("basic", "pro", "premium")
+
+        if not is_paid:
+            st.info("🔒 Upgrade to track and monitor your credit scores over time.")
+            if st.button("🚀 Upgrade Now", use_container_width=True, key="upgrade_score"):
+                st.session_state.show_upgrade = True
+                st.session_state.upgrade_source = "score_tracker"
+                st.rerun()
+            st.stop()
+
+        import sqlite3
+        conn = sqlite3.connect(auth.DB_PATH)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS score_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                bureau TEXT,
+                score INTEGER,
+                note TEXT,
+                logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        st.subheader("➕ Add Score")
+        col1, col2 = st.columns(2)
+        with col1:
+            bureau = st.selectbox("Bureau", ["Experian", "Equifax", "TransUnion"])
+            score = st.number_input("Score", min_value=300, max_value=850)
+        with col2:
+            note = st.text_input("Note (optional)")
+
+        if st.button("💾 Save Score"):
+            c.execute(
+                "INSERT INTO score_history (user_id, bureau, score, note) VALUES (?, ?, ?, ?)",
+                (st.session_state.user["id"], bureau, score, note)
+            )
+            conn.commit()
+            st.success("Score saved!")
+            st.rerun()
+
+        st.divider()
+        st.subheader("📈 Score History")
+        c.execute(
+            "SELECT bureau, score, note, logged_at FROM score_history WHERE user_id = ? ORDER BY logged_at DESC",
+            (st.session_state.user["id"],)
+        )
+        rows = c.fetchall()
+        if rows:
+            for row in rows:
+                st.write(f"**{row[0]}:** {row[1]} | {row[2]} | {row[3]}")
+        else:
+            st.info("No scores logged yet.")
+        conn.close()
+
+    with tab6:
+        st.header("📅 Dispute Tracker & Reminders")
+
+        user_plan = (st.session_state.get("user") or {}).get("plan", "free")
+        is_paid = user_plan in ("basic", "pro", "premium")
+
+        if not is_paid:
+            st.info("🔒 Upgrade to track disputes and follow-ups.")
+            if st.button("🚀 Upgrade Now", use_container_width=True, key="upgrade_disputes"):
+                st.session_state.show_upgrade = True
+                st.session_state.upgrade_source = "dispute_tracker"
+                st.rerun()
+            st.stop()
+
+        import sqlite3
+        conn = sqlite3.connect(auth.DB_PATH)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS dispute_reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                bureau TEXT,
+                dispute_description TEXT,
+                sent_date TEXT,
+                follow_up_date TEXT,
+                status TEXT DEFAULT 'pending'
+            )
+        """)
+        conn.commit()
+
+        st.subheader("➕ Add Dispute")
+        bureau = st.selectbox("Bureau", ["Experian", "Equifax", "TransUnion"], key="dispute_bureau")
+        description = st.text_area("Dispute Description")
+        sent_date = st.date_input("Date Sent")
+        follow_up = st.date_input("Follow-up Date")
+
+        if st.button("💾 Save Dispute"):
+            c.execute(
+                "INSERT INTO dispute_reminders (user_id, bureau, dispute_description, sent_date, follow_up_date) VALUES (?, ?, ?, ?, ?)",
+                (st.session_state.user["id"], bureau, description, str(sent_date), str(follow_up))
+            )
+            conn.commit()
+            st.success("Dispute saved!")
+            st.rerun()
+
+        st.divider()
+        st.subheader("📋 Your Disputes")
+        c.execute(
+            "SELECT id, bureau, dispute_description, sent_date, follow_up_date, status FROM dispute_reminders WHERE user_id = ? ORDER BY sent_date DESC",
+            (st.session_state.user["id"],)
+        )
+        rows = c.fetchall()
+        for row in rows:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"""
+                **{row[1]}** — {row[2]}
+                Sent: {row[3]} | Follow-up: {row[4]} | Status: **{row[5]}**
+                """)
+            with col2:
+                if row[5] == 'pending':
+                    if st.button("✅ Resolved", key=f"resolve_{row[0]}"):
+                        conn2 = sqlite3.connect(auth.DB_PATH)
+                        conn2.execute("UPDATE dispute_reminders SET status = 'resolved' WHERE id = ?", (row[0],))
+                        conn2.commit()
+                        conn2.close()
+                        st.rerun()
+        if not rows:
+            st.info("No disputes tracked yet. Add one above!")
+        conn.close()            
     
     # Footer
     st.markdown(
