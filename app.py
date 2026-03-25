@@ -543,7 +543,7 @@ def main():
         st.caption("💡 **Tip:** Fill this out before uploading your report")
     
     # Main content area
-    tab1, tab2, tab3 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Analyze", "📝 Dispute Letters", "📈 Credit Plan", "💬 AI Assistant"])
     
     with tab1:
         st.header("Step 1: Upload Your Credit Report")
@@ -724,7 +724,10 @@ def main():
                         st.session_state.errors_found,
                         client
                     )
-                
+
+    with tab4:
+        from chat_assistant import show_chat_assistant
+        show_chat_assistant()            
                 st.success("[OK] Your plan is ready!")
                 st.markdown(plan)
                 
