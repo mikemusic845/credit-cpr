@@ -37,14 +37,14 @@ def landing_page():
     """, unsafe_allow_html=True)
 
     # Hero CTA
+    st.caption("📄 Works with Experian, Equifax, and TransUnion reports")
+    st.warning("⚡ Most users find errors on their first report within minutes")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🚀 Analyze My Credit Report Now", type="primary", use_container_width=True, key="hero_cta"):
             st.session_state.show_landing = False
             st.rerun()
 
-    st.caption("📄 Works with Experian, Equifax, and TransUnion reports")
-    st.warning("⚡ Most users find errors on their first report within minutes")
     st.markdown("#### Trusted by people fixing their credit every day")
 
     st.markdown("---")
@@ -220,6 +220,7 @@ def landing_page():
         if st.button("🚀 Analyze My Credit Report Now", type="primary", use_container_width=True, key="pricing_cta"):
             st.session_state.show_landing = False
             st.rerun()
+    st.caption("Cancel anytime. No long-term contracts.")
 
     st.markdown("---")
 
