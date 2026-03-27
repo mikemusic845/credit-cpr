@@ -30,6 +30,7 @@ def landing_page():
             <p style='text-align:center;color:#16a34a;font-weight:bold;'>🔥 MOST POPULAR</p>
             <h3>🟩 Pro</h3>
             <h2>$29/mo</h2>
+            <p style='color:#16a34a;font-weight:bold;'>Best value for most users</p>
             <p><strong>Everything in Basic, plus powerful automation</strong></p>
             <hr>
             <ul style='text-align:left;list-style:none;padding:0;'>
