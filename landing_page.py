@@ -1,6 +1,6 @@
 import streamlit as st
 
-def show_landing_page():
+def landing_page():
     st.markdown("<h1 style='text-align:center;'>Choose Your Plan</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align:center;'>Take control of your credit — no middleman needed</h3>", unsafe_allow_html=True)
 
